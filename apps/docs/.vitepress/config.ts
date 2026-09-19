@@ -13,6 +13,7 @@ export default defineConfig({
         text: '方案',
         items: [
           { text: '大数据列表/表格渲染', link: '/patterns/big-data-table' },
+          { text: '可视化流程图编辑器', link: '/patterns/flow-editor' },
         ],
       },
     ],

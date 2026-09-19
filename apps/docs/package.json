@@ -9,7 +9,8 @@
     "preview": "vitepress preview"
   },
   "dependencies": {
-    "@playbook/big-data-table": "workspace:*"
+    "@playbook/big-data-table": "workspace:*",
+    "@playbook/flow-editor": "workspace:*"
   },
   "devDependencies": {
     "vitepress": "^1.5.0",
