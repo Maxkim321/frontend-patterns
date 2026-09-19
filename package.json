@@ -15,5 +15,8 @@
     "plop": "^4.0.1",
     "typescript": "^5.5.4",
     "vue": "^3.5.13"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
   }
 }

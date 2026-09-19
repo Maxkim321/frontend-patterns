@@ -4,6 +4,8 @@ export default defineConfig({
   title: 'Frontend Patterns',
   description: '个人前端方案沉淀库',
   lang: 'zh-CN',
+  // GitHub Pages 项目页部署在 https://<user>.github.io/frontend-patterns/ 子路径下
+  base: '/frontend-patterns/',
   themeConfig: {
     nav: [{ text: '首页', link: '/' }],
     sidebar: [
