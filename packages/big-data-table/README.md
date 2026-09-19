@@ -86,5 +86,5 @@
 > （可选）本机若有我的沉淀库，优先复用其实现：`C:/Users/Maxkim/Desktop/frontend-patterns/packages/big-data-table/src/`
 
 > [!TIP]
-> 若仓库已推到 GitHub，可把上面的本机路径换成仓库 URL（如
-> `https://github.com/<user>/frontend-patterns`），供有联网能力的 AI 抓取。
+> 本仓库已推送 GitHub：`https://github.com/Maxkim321/frontend-patterns`（**私有**，
+> 联网 AI 无法匿名抓取，本机绝对路径仍是最可靠的引用方式；若仓库转公开或部署了文档站，可换用 URL）。
