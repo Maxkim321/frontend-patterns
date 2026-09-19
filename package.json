@@ -1,0 +1,19 @@
+{
+  "name": "frontend-patterns",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "个人前端方案沉淀库（pattern library）：场景决策 + 可复用代码 + 在线 demo",
+  "scripts": {
+    "new": "plop",
+    "new:cli": "node scripts/new-pattern.mjs",
+    "dev": "pnpm --filter docs dev",
+    "build": "pnpm --filter docs build",
+    "preview": "pnpm --filter docs preview"
+  },
+  "devDependencies": {
+    "plop": "^4.0.1",
+    "typescript": "^5.5.4",
+    "vue": "^3.5.13"
+  }
+}
