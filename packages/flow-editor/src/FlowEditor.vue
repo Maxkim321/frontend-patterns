@@ -70,6 +70,14 @@
                 class="fe-handle fe-handle-out"
                 :style="{ top: handleOffset(i, p.data.ports.outputs.length) }"
               />
+              <!-- 端口标签（如条件分支的「高置信/低置信」），与端口同偏移 -->
+              <template v-for="(port, i) in p.data.ports?.outputs || []" :key="'pl-' + port.id">
+                <span
+                  v-if="port.label"
+                  class="fe-port-label-out"
+                  :style="{ top: handleOffset(i, p.data.ports.outputs.length) }"
+                >{{ port.label }}</span>
+              </template>
             </div>
           </template>
         </VueFlow>
@@ -137,6 +145,7 @@ function colorOf(category?: string) {
   const map: Record<string, string> = {
     起止: '#8b8fa3',
     审批: '#0969da',
+    AI: '#8250df',
     网关: '#b08800',
     输入: '#0969da',
     处理: '#8250df',
@@ -261,6 +270,7 @@ defineExpose({
 }
 
 .fe-node {
+  position: relative;
   min-width: 120px;
   padding: 10px 14px;
   background: #fff;
@@ -268,6 +278,21 @@ defineExpose({
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   font-size: 13px;
+}
+
+.fe-port-label-out {
+  position: absolute;
+  right: -52px;
+  transform: translateY(-50%);
+  width: 46px;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+  color: #0969da;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 3px;
+  padding: 1px 2px;
+  pointer-events: none;
 }
 
 .fe-node-label {

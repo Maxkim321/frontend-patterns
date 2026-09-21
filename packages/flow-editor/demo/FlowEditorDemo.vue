@@ -1,6 +1,6 @@
 <template>
   <div class="fe-demo">
-    <!-- 业务切换：同一编辑器，只换 materials + validators 配置 -->
+    <!-- 业务切换：同一编辑器，只换 materials + validators + initialGraph -->
     <div class="fe-demo-bar">
       <div class="fe-demo-switch">
         <button
@@ -13,13 +13,14 @@
           {{ key }}
         </button>
       </div>
-      <span class="fe-demo-note">当前业务：{{ current }} —— 编辑器本体零业务逻辑，业务语义全在配置里</span>
+      <span class="fe-demo-note">当前业务：{{ current }} —— 切换 = 换物料 + 校验规则 + 初始图，编辑器本体零业务逻辑</span>
       <button type="button" class="fe-demo-save" @click="showJson = !showJson">
         {{ showJson ? '隐藏' : '查看' }}图 JSON
       </button>
     </div>
 
     <FlowEditor
+      :key="current"
       ref="editorRef"
       :materials="businesses[current].materials"
       :validators="businesses[current].validators"
@@ -30,9 +31,8 @@
     <pre v-if="showJson" class="fe-demo-json">{{ json || '（点击保存按钮生成）' }}</pre>
 
     <p class="fe-demo-tip">
-      试一下：从左侧拖物料进画布 → 从节点右侧圆点连线到下一个节点 →
-      试着让「开始」连出两条线或连一个环，看校验拦截 →
-      选中节点/连线按 Delete 删除 → 撤销/重做 → 切换业务看物料和校验规则变化。
+      画布已预置一条完整 AI 审批链：开始 → AI 预审 → 条件分支（高置信自动通过 / 低置信转人工复核）→ 结束。
+      试：故意让「开始」连出第二条线看校验拦截、选中节点/连线按 Delete 删除、撤销/重做、切换业务看整套配置变化。
     </p>
   </div>
 </template>
@@ -40,31 +40,47 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { FlowEditor, forbidDirection, limitOutgoing, maxIncoming } from '../src/index'
-import type { EdgeValidator, MaterialDef } from '../src/index'
+import type { EdgeValidator, FlowGraph, FlowGraphNode, MaterialDef, PortDef } from '../src/index'
 
-interface BusinessConfig {
-  materials: MaterialDef[]
-  validators: EdgeValidator[]
-  initialGraph?: never
+// ---- 端口/节点工厂：初始图与物料共用同一份 ports 定义 ----
+const noIn = { inputs: [] as PortDef[], outputs: [{ id: 'out', type: 'out' as const }] }
+const inOut = {
+  inputs: [{ id: 'in', type: 'in' as const }],
+  outputs: [{ id: 'out', type: 'out' as const }],
+}
+const noOut = { inputs: [{ id: 'in', type: 'in' as const }], outputs: [] as PortDef[] }
+const confidenceBranches = {
+  inputs: [{ id: 'in', type: 'in' as const }],
+  outputs: [
+    { id: 'high', type: 'out' as const, label: '高置信' },
+    { id: 'low', type: 'out' as const, label: '低置信' },
+  ],
 }
 
-// ---- 业务 A：审批流 ----
+function businessNode(
+  id: string,
+  label: string,
+  category: string,
+  businessType: string,
+  x: number,
+  y: number,
+  ports: { inputs: PortDef[]; outputs: PortDef[] }
+): FlowGraphNode {
+  return {
+    id,
+    type: 'business',
+    position: { x, y },
+    data: { label, category, businessType, ports },
+  }
+}
+
+// ---- 业务 A：AI 审批流（主场景）----
 const approvalMaterials: MaterialDef[] = [
-  { type: 'start', label: '开始', category: '起止', ports: { inputs: [], outputs: [{ id: 'out', type: 'out' }] } },
-  { type: 'approve', label: '审批节点', category: '审批', ports: { inputs: [{ id: 'in', type: 'in' }], outputs: [{ id: 'out', type: 'out' }] } },
-  {
-    type: 'condition',
-    label: '条件分支',
-    category: '网关',
-    ports: {
-      inputs: [{ id: 'in', type: 'in' }],
-      outputs: [
-        { id: 'yes', type: 'out', label: '是' },
-        { id: 'no', type: 'out', label: '否' },
-      ],
-    },
-  },
-  { type: 'end', label: '结束', category: '起止', ports: { inputs: [{ id: 'in', type: 'in' }], outputs: [] } },
+  { type: 'start', label: '开始', category: '起止', ports: noIn },
+  { type: 'ai-review', label: 'AI 预审', category: 'AI', ports: inOut },
+  { type: 'condition', label: '条件分支', category: '网关', ports: confidenceBranches },
+  { type: 'approve', label: '人工复核', category: '审批', ports: inOut },
+  { type: 'end', label: '结束', category: '起止', ports: noOut },
 ]
 
 const approvalValidators: EdgeValidator[] = [
@@ -74,18 +90,53 @@ const approvalValidators: EdgeValidator[] = [
   limitOutgoing('condition', 2),
 ]
 
-// ---- 业务 B：数据编排 ----
+const approvalGraph: FlowGraph = {
+  nodes: [
+    businessNode('n-start', '开始', '起止', 'start', 0, 200, noIn),
+    businessNode('n-ai', 'AI 预审', 'AI', 'ai-review', 240, 200, inOut),
+    businessNode('n-cond', '条件分支', '网关', 'condition', 480, 200, confidenceBranches),
+    businessNode('n-approve', '人工复核', '审批', 'approve', 740, 90, inOut),
+    businessNode('n-end', '结束', '起止', 'end', 980, 200, noOut),
+  ],
+  edges: [
+    { id: 'e1', source: 'n-start', sourceHandle: 'out', target: 'n-ai', targetHandle: 'in' },
+    { id: 'e2', source: 'n-ai', sourceHandle: 'out', target: 'n-cond', targetHandle: 'in' },
+    { id: 'e3', source: 'n-cond', sourceHandle: 'high', target: 'n-end', targetHandle: 'in' },
+    { id: 'e4', source: 'n-cond', sourceHandle: 'low', target: 'n-approve', targetHandle: 'in' },
+    { id: 'e5', source: 'n-approve', sourceHandle: 'out', target: 'n-end', targetHandle: 'in' },
+  ],
+}
+
+// ---- 业务 B：数据编排（复用性证明）----
 const etlMaterials: MaterialDef[] = [
-  { type: 'source', label: '数据源', category: '输入', ports: { inputs: [], outputs: [{ id: 'out', type: 'out' }] } },
-  { type: 'transform', label: '算子', category: '处理', ports: { inputs: [{ id: 'in', type: 'in' }], outputs: [{ id: 'out', type: 'out' }] } },
-  { type: 'sink', label: '输出', category: '输出', ports: { inputs: [{ id: 'in', type: 'in' }], outputs: [] } },
+  { type: 'source', label: '数据源', category: '输入', ports: noIn },
+  { type: 'transform', label: '算子', category: '处理', ports: inOut },
+  { type: 'sink', label: '输出', category: '输出', ports: noOut },
 ]
 
 const etlValidators: EdgeValidator[] = [maxIncoming('transform', 2)]
 
-const businesses: Record<string, Omit<BusinessConfig, 'initialGraph'>> = {
-  审批流: { materials: approvalMaterials, validators: approvalValidators },
-  数据编排: { materials: etlMaterials, validators: etlValidators },
+const etlGraph: FlowGraph = {
+  nodes: [
+    businessNode('s1', '数据源', '输入', 'source', 0, 200, noIn),
+    businessNode('t1', '算子', '处理', 'transform', 240, 200, inOut),
+    businessNode('k1', '输出', '输出', 'sink', 480, 200, noOut),
+  ],
+  edges: [
+    { id: 'e1', source: 's1', sourceHandle: 'out', target: 't1', targetHandle: 'in' },
+    { id: 'e2', source: 't1', sourceHandle: 'out', target: 'k1', targetHandle: 'in' },
+  ],
+}
+
+interface BusinessConfig {
+  materials: MaterialDef[]
+  validators: EdgeValidator[]
+  initialGraph: FlowGraph
+}
+
+const businesses: Record<string, BusinessConfig> = {
+  审批流: { materials: approvalMaterials, validators: approvalValidators, initialGraph: approvalGraph },
+  数据编排: { materials: etlMaterials, validators: etlValidators, initialGraph: etlGraph },
 }
 
 const current = ref('审批流')
