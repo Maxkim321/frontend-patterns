@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@playbook/big-data-table": "workspace:*",
-    "@playbook/flow-editor": "workspace:*"
+    "@playbook/flow-editor": "workspace:*",
+    "@playbook/query-table": "workspace:*"
   },
   "devDependencies": {
     "vitepress": "^1.5.0",

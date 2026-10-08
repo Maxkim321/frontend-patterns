@@ -14,6 +14,7 @@ export default defineConfig({
         items: [
           { text: '大数据列表/表格渲染', link: '/patterns/big-data-table' },
           { text: '可视化流程图编辑器', link: '/patterns/flow-editor' },
+          { text: '查询表格封装', link: '/patterns/query-table' },
         ],
       },
     ],
