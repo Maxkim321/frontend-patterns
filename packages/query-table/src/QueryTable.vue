@@ -2,53 +2,79 @@
   <div class="qf-table">
     <el-table
       v-loading="loading"
+      ref="tableRef"
       :data="rows"
-      :border="border"
-      stripe
       :row-key="rowKey"
+      :height="height"
+      :max-height="maxHeight"
+      :show-overflow-tooltip="showTooltip"
+      :header-cell-style="{ height: cellHeight }"
+      :cell-style="{ height: cellHeight }"
       style="width: 100%"
-      @selection-change="(rs: Record<string, unknown>[]) => emit('selection-change', rs)"
+      @selection-change="onSelectionChange"
+      @current-change="(row: Record<string, unknown> | null) => currentRow = row"
     >
-      <el-table-column v-if="showSelection" type="selection" width="44" align="center" />
-      <el-table-column v-if="showIndex" type="index" label="序号" width="60" align="center" />
+      <!-- 多选列：reserve-selection 跨页保留勾选，依赖 row-key -->
+      <el-table-column
+        v-if="showSelection"
+        type="selection"
+        :reserve-selection="!!rowKey"
+        :selectable="selectable"
+        width="44"
+        align="center"
+      />
+
+      <!-- 单选列：checkbox 样式的单选，@click.prevent.stop 阻断 el-checkbox 自身翻转 -->
+      <el-table-column v-if="showRadio" width="50" align="center">
+        <template #default="{ row }">
+          <el-checkbox
+            :model-value="currentRow?.[radioParam] === row[radioParam]"
+            @click.prevent.stop="emit('row-radio', row)"
+          />
+        </template>
+      </el-table-column>
+
+      <!-- 序号列：跨页连续，(page-1)*size + $index + 1 -->
+      <el-table-column v-if="showIndex" label="序号" type="index" width="70" align="center">
+        <template #default="scope">
+          {{ (page - 1) * pageSize + scope.$index + 1 }}
+        </template>
+      </el-table-column>
 
       <el-table-column
         v-for="col in columns"
         :key="col.prop"
         :prop="col.prop"
         :label="col.label"
+        :width="col.width"
         :min-width="col.minWidth"
         :fixed="col.fixed"
-        :show-overflow-tooltip="col.showTooltip"
-        align="center"
+        :align="col.align ?? 'left'"
+        :show-overflow-tooltip="col.showTooltip ?? showTooltip"
       >
-        <!-- 文本列：formatter + 空值兜底 -->
-        <template v-if="col.type !== 'btn'" #default="{ row }">
-          <span>{{ col.formatter ? col.formatter(row) : (row[col.prop] ?? '—— ——') }}</span>
+        <!-- 表头插槽：插槽名 = `${prop}-header` -->
+        <template v-if="col.isHeadSlot" #header>
+          <slot :name="`${col.prop}-header`" :column="col" />
         </template>
 
-        <!-- 操作列：可渲染按钮集合配置在列上，显隐由行数据 row.btns 决定 -->
-        <template v-else #default="{ row }">
-          <el-button
-            v-for="btn in col.btns ?? []"
-            :key="btn.name"
-            :type="btn.type"
-            :plain="btn.plain"
-            size="small"
-            link
-            @click="emit('row-action', { action: btn.name, row })"
-          >
-            {{ btn.label }}
-          </el-button>
+        <!-- 内容插槽：插槽名 = prop，作用域 { row, value }；未开启则兜底渲染 + 空值占位 -->
+        <template #default="scope">
+          <slot
+            v-if="col.isSlot"
+            :name="col.prop"
+            :row="scope.row"
+            :value="scope.row[col.prop]"
+          />
+          <span v-else>{{ scope.row[col.prop] ?? '—— ——' }}</span>
         </template>
       </el-table-column>
     </el-table>
 
-    <div v-if="total > 0" class="qf-pagination">
+    <div v-if="!noPage && total > 0" class="qf-pagination">
       <el-pagination
         :current-page="page"
         :page-size="pageSize"
-        :page-sizes="[10, 20, 50]"
+        :page-sizes="pageSizes"
         :total="total"
         layout="total, sizes, prev, pager, next, jumper"
         @current-change="(p: number) => emit('page-change', { page: p, pageSize })"
@@ -59,35 +85,77 @@
 </template>
 
 <script setup lang="ts">
-import type { QueryColumn } from './types'
+import { ref, watch } from 'vue'
+import type { QueryColumn, QueryPage } from './types'
 
 /**
- * 配置驱动的表格 + 分页。设计要点（源自真实项目 DataTable 的提炼）：
- * 1. 操作列的按钮显隐由【行数据】决定（row.btns 数组声明这一行有哪些动作），
- *    按钮集合配置在列上——两者交集才渲染。这等价于一个轻量的行级权限模型：
- *    后端下发每行的可用操作，前端不硬编码 if/else。
- * 2. 文本列统一空值兜底 '—— ——'，formatter 只做展示转换。
- * 3. 分页状态由父组件持有（page/pageSize + page-change 事件），
- *    查询参数变化时父组件负责把 page 重置为 1。
+ * 配置驱动 + 插槽外放的表格（源自洛阳智能体 quotation-agent 的 QaTable 提炼）。
+ *
+ * 设计要点：
+ * 1. 插槽外放：列配置 isSlot / isHeadSlot 后，渲染权交给业务方，插槽名 = 列 prop
+ *    （表头 = `${prop}-header`）。组件不预判任何业务形态（金额/状态/操作……），
+ *    业务方 <template #amount="{ row }"> 自由渲染。
+ * 2. 跨页勾选：reserve-selection 依赖 row-key——没有稳定 id 就没有跨页保留。
+ * 3. 受控勾选：selectedRows 由父组件持有，watch 回填 toggleRowSelection；
+ *    clearSelection 通过 defineExpose 提供给父组件（如删除后清空）。
+ * 4. 单选列：el-checkbox 自带点击翻转，外层 @click.prevent.stop 阻断后由组件
+ *    单一数据源（currentRow）驱动，避免"点一下翻转两次"。
+ * 5. 序号跨页连续：(page-1)*pageSize + $index + 1。
  */
-defineProps<{
+const props = defineProps<{
   columns: QueryColumn[]
   rows: Record<string, unknown>[]
   total: number
   page: number
   pageSize: number
   loading?: boolean
-  border?: boolean
+  /** 跨页保留勾选必须提供 row-key */
   rowKey?: string
   showSelection?: boolean
+  showRadio?: boolean
+  /** 单选行的唯一键字段，默认 'id' */
+  radioParam?: string
+  /** 多选行禁用函数（返回 false 的行不可勾选） */
+  selectable?: (row: Record<string, unknown>) => boolean
+  /** 父组件持有的选中行（受控） */
+  selectedRows?: Record<string, unknown>[]
   showIndex?: boolean
+  showTooltip?: boolean
+  cellHeight?: string
+  noPage?: boolean
+  height?: string
+  maxHeight?: string
+  pageSizes?: number[]
 }>()
 
 const emit = defineEmits<{
-  'page-change': [p: { page: number; pageSize: number }]
-  'row-action': [a: { action: string; row: Record<string, unknown> }]
+  'page-change': [p: QueryPage]
   'selection-change': [rows: Record<string, unknown>[]]
+  'row-radio': [row: Record<string, unknown>]
 }>()
+
+const tableRef = ref()
+const currentRow = ref<Record<string, unknown> | null>(null)
+
+function onSelectionChange(rows: Record<string, unknown>[]) {
+  emit('selection-change', rows)
+}
+
+// 受控勾选回填：父组件 selectedRows 变化 → 同步到表格
+watch(
+  () => props.selectedRows,
+  (next) => {
+    if (!tableRef.value) return
+    tableRef.value.clearSelection()
+    for (const row of next ?? []) tableRef.value.toggleRowSelection(row, true)
+  }
+)
+
+/** 供父组件清空勾选（删除/重置后调用） */
+function clearSelection() {
+  tableRef.value?.clearSelection()
+}
+defineExpose({ clearSelection })
 </script>
 
 <style scoped>

@@ -25,31 +25,25 @@ export interface SearchBtn {
   plain?: boolean
 }
 
-/** 表格列配置 */
+/**
+ * 表格列配置。
+ * isSlot / isHeadSlot 是本封装的核心机制：开启后内容/表头渲染权交给业务方，
+ * 插槽名 = 列的 prop（内容）/ `${prop}-header`（表头），业务方模板里
+ * <template #amount="{ row }"> 即可完全自定义该列渲染。
+ */
 export interface QueryColumn {
   prop: string
   label: string
+  width?: number
   minWidth?: number
   fixed?: 'left' | 'right'
+  align?: 'left' | 'center' | 'right'
   /** 溢出时 tooltip 展示全文 */
   showTooltip?: boolean
-  /**
-   * 列类型：'text'（默认，文本 + 空值兜底）| 'btn'（操作列，渲染 row.btns 里声明的按钮）
-   */
-  type?: 'text' | 'btn'
-  /** text 列格式化：(row) => string */
-  formatter?: (row: Record<string, unknown>) => string
-  /** btn 列可渲染的按钮集合，实际显隐由 row.btns 数组决定 */
-  btns?: QueryRowBtn[]
-}
-
-/** 行操作按钮定义（配置在列上，显隐由行数据控制） */
-export interface QueryRowBtn {
-  /** 动作名，点击后 emit('row-action', { action, row }) */
-  name: string
-  label: string
-  type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
-  plain?: boolean
+  /** 开启内容插槽：插槽名为 prop，作用域参数 { row, value } */
+  isSlot?: boolean
+  /** 开启表头插槽：插槽名为 `${prop}-header` */
+  isHeadSlot?: boolean
 }
 
 export interface QueryPage {

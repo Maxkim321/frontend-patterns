@@ -1,6 +1,6 @@
 <template>
   <div class="qt-demo">
-    <!-- 业务切换：同一套 SearchForm + QueryTable，只换 fields/columns 配置 -->
+    <!-- 业务切换：同一套 SearchForm + QueryTable，只换配置与插槽内容 -->
     <div class="qt-demo-bar">
       <div class="qt-demo-switch">
         <button
@@ -13,7 +13,9 @@
           {{ key }}
         </button>
       </div>
-      <span class="qt-demo-note">查询表单 + 表格 + 分页全部由配置驱动，切换业务 = 换配置</span>
+      <span class="qt-demo-note">
+        列渲染权通过插槽外放：{{ current }} 的金额/状态/操作列都是业务方插槽（插槽名 = 列 prop）
+      </span>
     </div>
 
     <SearchForm
@@ -35,13 +37,51 @@
       :loading="loading"
       row-key="id"
       show-index
+      show-tooltip
       @page-change="onPageChange"
-      @row-action="onRowAction"
-    />
+    >
+      <!-- ═══ 报价单业务的插槽渲染（插槽名 = 列 prop）═══ -->
+      <template v-if="current === '报价单管理'" #amount="{ row }">
+        <span :style="{ color: (row.amount as number) > 50000 ? '#cf222e' : '#1a7f37', fontWeight: 600 }">
+          ¥{{ (row.amount as number).toLocaleString() }}
+        </span>
+      </template>
+      <template v-if="current === '报价单管理'" #status="{ row }">
+        <span
+          class="qt-tag"
+          :style="{
+            background: row.status === '已成交' ? '#dafbe1' : row.status === '报价中' ? '#ddf4ff' : '#ffebe9',
+            color: row.status === '已成交' ? '#1a7f37' : row.status === '报价中' ? '#0969da' : '#cf222e',
+          }"
+        >{{ row.status }}</span>
+      </template>
+      <template v-if="current === '报价单管理'" #operation="{ row }">
+        <el-text type="primary" class="qt-link" @click="onRowAction('编辑报价单', row)">编辑</el-text>
+        <el-text type="danger" class="qt-link" @click="onRowAction('删除报价单', row)">删除</el-text>
+      </template>
 
-    <p class="qt-demo-tip">
-      最近一次操作：{{ lastAction || '（还没有操作）' }}
-    </p>
+      <!-- ═══ 问答管理业务的插槽渲染 ═══ -->
+      <template v-if="current === '问答管理'" #question="{ row }">
+        <span class="qt-strong">{{ row.question }}</span>
+      </template>
+      <template v-if="current === '问答管理'" #status="{ row }">
+        <span
+          class="qt-tag"
+          :style="{
+            background: row.status === '已采纳' ? '#dafbe1' : '#fff8c5',
+            color: row.status === '已采纳' ? '#1a7f37' : '#9a6700',
+          }"
+        >{{ row.status }}</span>
+      </template>
+      <template v-if="current === '问答管理'" #feedback="{ row }">
+        <span>👍 {{ row.likes }} · 👎 {{ row.dislikes }}</span>
+      </template>
+      <template v-if="current === '问答管理'" #operation="{ row }">
+        <el-text type="primary" class="qt-link" @click="onRowAction('查看答案', row)">查看</el-text>
+      </template>
+    </QueryTable>
+
+    <p class="qt-demo-tip">最近一次操作：{{ lastAction || '（还没有操作）' }}</p>
   </div>
 </template>
 
@@ -50,141 +90,146 @@ import { computed, ref } from 'vue'
 import { SearchForm, QueryTable } from '../src/index'
 import type { QueryColumn, SearchField, SearchParams } from '../src/index'
 
-// ---- 假后端：57 行数据 + 过滤 + 分页 ----
-interface BizRow extends Record<string, unknown> {
+// ══════ 假后端：数据 + 过滤 + 分页 ══════
+interface QuoteRow extends Record<string, unknown> {
   id: number
-  name: string
-  breed: string
+  quoteNo: string
+  customer: string
+  product: string
+  amount: number
   status: string
-  weight: number
   date: string
-  btns: string[]
+}
+interface QaRow extends Record<string, unknown> {
+  id: number
+  question: string
+  answerBy: string
+  asker: string
+  status: string
+  likes: number
+  dislikes: number
 }
 
-const pool: BizRow[] = Array.from({ length: 57 }, (_, i) => ({
-  id: i + 1,
-  name: `样本-${String(i + 1).padStart(3, '0')}`,
-  breed: ['荷斯坦', '西门塔尔', '安格斯'][i % 3],
-  status: ['在群', '离群', '待定'][i % 3],
-  weight: 320 + ((i * 17) % 260),
-  date: `2026-0${(i % 9) + 1}-1${i % 9}`,
-  // 行级按钮由数据下发（轻量行级权限模型）
-  btns: i % 3 === 1 ? ['detail', 'edit'] : ['detail'],
-}))
-
-function fakeQuery(params: SearchParams, page: number, pageSize: number) {
-  return new Promise<{ rows: BizRow[]; total: number }>((resolve) => {
+function fakeQuery<T extends Record<string, unknown>>(
+  pool: T[],
+  match: (r: T) => boolean,
+  page: number,
+  pageSize: number
+) {
+  return new Promise<{ rows: T[]; total: number }>((resolve) => {
     setTimeout(() => {
-      let list = pool
-      const kw = String(params.keyword ?? '')
-      const breed = String(params.breed ?? '')
-      const status = String(params.status ?? '')
-      const range = params.weight as { startValue?: number; endValue?: number } | undefined
-      if (kw) list = list.filter((r) => r.name.includes(kw))
-      if (breed) list = list.filter((r) => r.breed === breed)
-      if (status) list = list.filter((r) => r.status === status)
-      if (range?.startValue != null) list = list.filter((r) => r.weight >= range.startValue!)
-      if (range?.endValue != null) list = list.filter((r) => r.weight <= range.endValue!)
+      const list = pool.filter(match)
       resolve({ rows: list.slice((page - 1) * pageSize, page * pageSize), total: list.length })
     }, 300)
   })
 }
 
-// ---- 业务 A：繁育数据管理（源自真实项目域）----
-const breedFields: SearchField[] = [
-  { name: 'keyword', label: '样本名称', type: 'input', placeholder: '支持回车查询' },
-  {
-    name: 'breed',
-    label: '品种',
-    type: 'select',
-    clearable: true,
-    options: [
-      { label: '荷斯坦', value: '荷斯坦' },
-      { label: '西门塔尔', value: '西门塔尔' },
-      { label: '安格斯', value: '安格斯' },
-    ],
-  },
+// ══════ 业务 A：报价单管理（quotation-agent 主业务）══════
+const quotePool: QuoteRow[] = Array.from({ length: 43 }, (_, i) => ({
+  id: i + 1,
+  quoteNo: `QT-2026${String(9000 + i)}`,
+  customer: `客户${['华信', '中科', '蓝天', '远景'][i % 4]}${i}号`,
+  product: ['智能体平台-标准版', '智能体平台-旗舰版', '私有化部署', '咨询实施'][i % 4],
+  amount: 8000 + i * 6100,
+  status: ['报价中', '已成交', '已关闭'][i % 3],
+  date: `2026-0${(i % 9) + 1}-1${i % 9}`,
+}))
+
+const quoteFields: SearchField[] = [
+  { name: 'keyword', label: '报价单号', type: 'input', placeholder: '支持回车查询' },
   {
     name: 'status',
     label: '状态',
     type: 'select',
     clearable: true,
     options: [
-      { label: '在群', value: '在群' },
-      { label: '离群', value: '离群' },
-      { label: '待定', value: '待定' },
-    ],
-  },
-  { name: 'weight', label: '体重区间', type: 'number-range' },
-]
-
-const breedColumns: QueryColumn[] = [
-  { prop: 'name', label: '样本名称', minWidth: 120 },
-  { prop: 'breed', label: '品种', minWidth: 100 },
-  { prop: 'status', label: '状态', minWidth: 90 },
-  { prop: 'weight', label: '体重(kg)', minWidth: 100 },
-  { prop: 'date', label: '测定日期', minWidth: 120 },
-  {
-    prop: 'actions',
-    label: '操作',
-    type: 'btn',
-    fixed: 'right',
-    minWidth: 130,
-    btns: [
-      { name: 'detail', label: '详情', type: 'primary' },
-      { name: 'edit', label: '编辑', type: 'warning' },
-    ],
-  },
-]
-
-// ---- 业务 B：订单管理 ----
-const orderFields: SearchField[] = [
-  { name: 'keyword', label: '订单号', type: 'input', placeholder: '回车查询' },
-  {
-    name: 'status',
-    label: '订单状态',
-    type: 'select',
-    clearable: true,
-    options: [
-      { label: '已支付', value: '已支付' },
-      { label: '已发货', value: '已发货' },
+      { label: '报价中', value: '报价中' },
+      { label: '已成交', value: '已成交' },
       { label: '已关闭', value: '已关闭' },
     ],
   },
-  { name: 'date', label: '下单日期', type: 'daterange' },
+  { name: 'amount', label: '金额区间', type: 'number-range' },
 ]
 
-const orderColumns: QueryColumn[] = [
-  { prop: 'name', label: '订单号', minWidth: 140 },
-  { prop: 'status', label: '状态', minWidth: 100 },
-  { prop: 'date', label: '下单日期', minWidth: 120 },
+const quoteColumns: QueryColumn[] = [
+  { prop: 'quoteNo', label: '报价单号', minWidth: 130 },
+  { prop: 'customer', label: '客户', minWidth: 130 },
+  { prop: 'product', label: '产品', minWidth: 160, showTooltip: true },
+  { prop: 'amount', label: '金额', isSlot: true, minWidth: 120 },
+  { prop: 'status', label: '状态', isSlot: true, minWidth: 90 },
+  { prop: 'date', label: '报价日期', minWidth: 120 },
+  { prop: 'operation', label: '操作', isSlot: true, fixed: 'right', width: 110 },
+]
+
+// ══════ 业务 B：问答管理（system-management / qa-management）══════
+const qaPool: QaRow[] = Array.from({ length: 31 }, (_, i) => ({
+  id: i + 1,
+  question: `关于产品参数的问题${i + 1}（智能体部署方式？）`,
+  answerBy: `答案来源-${['知识库', '人工', '模型'][i % 3]}`,
+  asker: `用户${i + 1}`,
+  status: i % 2 === 0 ? '已采纳' : '待审核',
+  likes: (i * 7) % 40,
+  dislikes: i % 5,
+}))
+
+const qaFields: SearchField[] = [
+  { name: 'keyword', label: '问题', type: 'input', placeholder: '回车查询' },
   {
-    prop: 'actions',
-    label: '操作',
-    type: 'btn',
-    fixed: 'right',
-    minWidth: 130,
-    btns: [
-      { name: 'detail', label: '查看', type: 'primary' },
-      { name: 'edit', label: '改地址', type: 'warning' },
+    name: 'status',
+    label: '状态',
+    type: 'select',
+    clearable: true,
+    options: [
+      { label: '已采纳', value: '已采纳' },
+      { label: '待审核', value: '待审核' },
     ],
   },
 ]
 
-const businesses = {
-  繁育数据管理: {
-    fields: breedFields,
-    columns: breedColumns,
-    initial: { status: '在群' } as SearchParams,
-  },
-  订单管理: {
-    fields: orderFields,
-    columns: orderColumns,
-    initial: {} as SearchParams,
-  },
-} satisfies Record<string, { fields: SearchField[]; columns: QueryColumn[]; initial: SearchParams }>
+const qaColumns: QueryColumn[] = [
+  { prop: 'question', label: '问题', isSlot: true, minWidth: 240, showTooltip: true },
+  { prop: 'answerBy', label: '答案来源', minWidth: 110 },
+  { prop: 'asker', label: '提问人', minWidth: 100 },
+  { prop: 'status', label: '状态', isSlot: true, minWidth: 90 },
+  { prop: 'feedback', label: '点赞/点踩', isSlot: true, minWidth: 110 },
+  { prop: 'operation', label: '操作', isSlot: true, fixed: 'right', width: 80 },
+]
 
-const current = ref<keyof typeof businesses>('繁育数据管理')
+const businesses = {
+  报价单管理: {
+    fields: quoteFields,
+    columns: quoteColumns,
+    initial: {} as SearchParams,
+    pool: quotePool,
+    match: (r: QuoteRow, p: SearchParams) => {
+      const kw = String(p.keyword ?? '')
+      const status = String(p.status ?? '')
+      const range = p.amount as { startValue?: number; endValue?: number } | undefined
+      return (
+        (!kw || r.quoteNo.includes(kw)) &&
+        (!status || r.status === status) &&
+        (!range?.startValue || r.amount >= range.startValue) &&
+        (!range?.endValue || r.amount <= range.endValue)
+      )
+    },
+  },
+  问答管理: {
+    fields: qaFields,
+    columns: qaColumns,
+    initial: {} as SearchParams,
+    pool: qaPool,
+    match: (r: QaRow, p: SearchParams) => {
+      const kw = String(p.keyword ?? '')
+      const status = String(p.status ?? '')
+      return (!kw || r.question.includes(kw)) && (!status || r.status === status)
+    },
+  },
+} satisfies Record<
+  string,
+  { fields: SearchField[]; columns: QueryColumn[]; initial: SearchParams; pool: Record<string, unknown>[]; match: (r: Record<string, unknown>, p: SearchParams) => boolean }
+>
+
+const current = ref<keyof typeof businesses>('报价单管理')
 const biz = computed(() => businesses[current.value])
 
 const rows = ref<Record<string, unknown>[]>([])
@@ -197,7 +242,7 @@ let lastParams: SearchParams = {}
 
 async function query(p = page.value, s = pageSize.value) {
   loading.value = true
-  const { rows: r, total: t } = await fakeQuery(lastParams, p, s)
+  const { rows: r, total: t } = await fakeQuery(biz.value.pool, (row) => biz.value.match(row, lastParams), p, s)
   rows.value = r
   total.value = t
   page.value = p
@@ -207,21 +252,16 @@ async function query(p = page.value, s = pageSize.value) {
 
 function onAction(name: string, params: SearchParams) {
   lastAction.value = `${name}：${JSON.stringify(params)}`
-  if (name === 'search') {
-    lastParams = params
-    query(1, pageSize.value) // 查询条件变化必须回到第 1 页
-  } else if (name === 'reset') {
-    lastParams = {}
-    query(1, pageSize.value)
-  }
+  lastParams = name === 'reset' ? {} : params
+  query(1, pageSize.value) // 查询条件变化必须回到第 1 页
 }
 
 function onPageChange(p: { page: number; pageSize: number }) {
   query(p.page, p.pageSize)
 }
 
-function onRowAction(a: { action: string; row: Record<string, unknown> }) {
-  lastAction.value = `行操作 ${a.action}：${JSON.stringify(a.row)}`
+function onRowAction(action: string, row: Record<string, unknown>) {
+  lastAction.value = `${action}：${JSON.stringify(row)}`
 }
 
 query()
@@ -264,6 +304,23 @@ query()
 .qt-demo-note {
   font-size: 12px;
   color: #57606a;
+}
+
+.qt-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qt-link {
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.qt-strong {
+  font-weight: 600;
 }
 
 .qt-demo-tip {
