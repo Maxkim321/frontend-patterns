@@ -1,0 +1,10 @@
+{
+  "name": "@playbook/family-tree",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "vue": "^3.5.13"
+  }
+}

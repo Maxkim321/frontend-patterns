@@ -9,8 +9,11 @@
     "preview": "vitepress preview"
   },
   "dependencies": {
+    "@playbook/ai-chat": "workspace:*",
     "@playbook/big-data-table": "workspace:*",
+    "@playbook/family-tree": "workspace:*",
     "@playbook/flow-editor": "workspace:*",
+    "@playbook/offline-task-queue": "workspace:*",
     "@playbook/query-table": "workspace:*"
   },
   "devDependencies": {

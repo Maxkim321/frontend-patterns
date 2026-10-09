@@ -20,12 +20,21 @@ importers:
 
   apps/docs:
     dependencies:
+      '@playbook/ai-chat':
+        specifier: workspace:*
+        version: link:../../packages/ai-chat
       '@playbook/big-data-table':
         specifier: workspace:*
         version: link:../../packages/big-data-table
+      '@playbook/family-tree':
+        specifier: workspace:*
+        version: link:../../packages/family-tree
       '@playbook/flow-editor':
         specifier: workspace:*
         version: link:../../packages/flow-editor
+      '@playbook/offline-task-queue':
+        specifier: workspace:*
+        version: link:../../packages/offline-task-queue
       '@playbook/query-table':
         specifier: workspace:*
         version: link:../../packages/query-table
@@ -37,7 +46,19 @@ importers:
         specifier: ^3.5.13
         version: 3.5.43(typescript@5.9.3)
 
+  packages/ai-chat:
+    dependencies:
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.43(typescript@5.9.3)
+
   packages/big-data-table:
+    dependencies:
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.43(typescript@5.9.3)
+
+  packages/family-tree:
     dependencies:
       vue:
         specifier: ^3.5.13
@@ -51,6 +72,12 @@ importers:
       '@vue-flow/core':
         specifier: ^1.42.0
         version: 1.48.2(vue@3.5.43(typescript@5.9.3))
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.43(typescript@5.9.3)
+
+  packages/offline-task-queue:
+    dependencies:
       vue:
         specifier: ^3.5.13
         version: 3.5.43(typescript@5.9.3)
