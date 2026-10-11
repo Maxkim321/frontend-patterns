@@ -14,7 +14,8 @@
     "@playbook/family-tree": "workspace:*",
     "@playbook/flow-editor": "workspace:*",
     "@playbook/offline-task-queue": "workspace:*",
-    "@playbook/query-table": "workspace:*"
+    "@playbook/query-table": "workspace:*",
+    "@playbook/workflow-editor": "workspace:*"
   },
   "devDependencies": {
     "vitepress": "^1.5.0",

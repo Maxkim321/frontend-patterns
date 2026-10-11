@@ -7,6 +7,7 @@ import FamilyTreeDemo from '@playbook/family-tree/demo/FamilyTreeDemo.vue'
 import FlowEditorDemo from '@playbook/flow-editor/demo/FlowEditorDemo.vue'
 import OfflineQueueDemo from '@playbook/offline-task-queue/demo/OfflineQueueDemo.vue'
 import QueryTableDemo from '@playbook/query-table/demo/QueryTableDemo.vue'
+import WorkflowDemo from '@playbook/workflow-editor/demo/WorkflowDemo.vue'
 import type { Theme } from 'vitepress'
 
 // 新增方案时，在这里注册对应 demo 组件，然后在 .md 里用组件标签引入
@@ -20,6 +21,7 @@ const theme: Theme = {
     app.component('FlowEditorDemo', FlowEditorDemo)
     app.component('OfflineQueueDemo', OfflineQueueDemo)
     app.component('QueryTableDemo', QueryTableDemo)
+    app.component('WorkflowDemo', WorkflowDemo)
   },
 }
 
