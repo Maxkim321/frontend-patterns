@@ -7,7 +7,7 @@
 
 # 查询表格封装
 
-源自洛阳智能体项目（quotation-agent 报价智能体）的 QaTable / PaginationBar 组件提炼：**配置驱动结构、插槽外放渲染**。配套的查询表单 SearchForm 同源同风格。
+源自本人实习期间公司项目的真实封装——报价智能体（quotation-agent）中的 QaTable / PaginationBar，在项目的系统管理、日志、角色等多个页面落地使用，这里是去业务化后的沉淀。**配置驱动结构、插槽外放渲染**。配套的查询表单 SearchForm 同源同风格。
 
 ## 决策层（为什么"配置 + 插槽"而不是纯配置）
 

@@ -7,7 +7,7 @@
 
 # 家系树可视化
 
-提炼来源：deepblup3.0 畜牧数据后台的系谱页（`views/FamilyTree/Genealogy.vue` + `components/Node.vue`）——一个用纯 DOM/Flex 自绘完全二叉树的真实验证过的方案；本库在其基础上把"节点自带 div 拼线"修正为统一计算的肘形连线。
+提炼来源：本人实习期间公司项目的畜牧数据后台（deepblup3.0）系谱页（`views/FamilyTree/Genealogy.vue` + `components/Node.vue`）——实习中实际上线运行的纯 DOM/Flex 自绘完全二叉树方案；本库在其基础上把"节点自带 div 拼线"修正为统一计算的肘形连线。
 
 ## 决策层（为什么不用图库）
 

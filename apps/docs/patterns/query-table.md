@@ -6,7 +6,7 @@
 <QueryTableDemo />
 </ClientOnly>
 
-> 源自洛阳智能体项目（quotation-agent 报价智能体）的 QaTable 提炼。
+> 源自本人实习期间公司项目（报价智能体 quotation-agent）中封装并落地使用的 QaTable，去业务化沉淀。
 > 「报价单管理 / 问答管理」两套业务切换，同一组件零改动——金额标色、状态标签、操作按钮
 > 全是业务方插槽（插槽名 = 列 prop），组件只管结构。
 

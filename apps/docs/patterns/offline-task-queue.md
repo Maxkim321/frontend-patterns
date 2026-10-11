@@ -6,9 +6,10 @@
 <OfflineQueueDemo />
 </ClientOnly>
 
-> 源自外业采集系统的移动端离线层提炼：任务先落本地库、按优先级并发上传、断网自动重试、
-> 进度持久化断点续传。核心队列框架无关（transport / persistence 均为注入），
-> Vue 侧只提供一个组合式封装 `useTaskQueue`。
+> 源自本人实习经历的真实输入：动机是实习项目网络层（quotation-agent 的 request.ts）里
+> 实际存在的弱网缺陷——axios 无 timeout 永久挂起、拦截器吞错把失败当成功（见下方坑 ①②）；
+> 重试策略提炼自我 agent-server 项目的 LLM 请求层（指数退避 + 错误分级 + 取消穿透，上线代码）。
+> 核心队列框架无关（transport / persistence 均为注入），Vue 侧只提供组合式封装 `useTaskQueue`。
 
 ## 决策层（为什么"核心 + 注入"）
 

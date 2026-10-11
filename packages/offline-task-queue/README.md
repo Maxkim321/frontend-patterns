@@ -7,7 +7,7 @@
 
 # 弱网离线任务队列
 
-重试机制的提炼来源：mcp-browser-analyzer 项目 agent-server 的 LLM 请求重试实现（`core/llm-providers.js`，指数退避 + 错误分级 + 取消穿透）；为什么要封装则来自业务项目的真实教训（见坑 ①②）。
+重试机制的提炼来源：本人 agent-server 项目的 LLM 请求层（`llm-providers.js`：指数退避 + 错误分级 + 取消穿透，上线代码）；为什么要封装则来自实习项目网络层的真实教训（见坑 ①②——弱网缺陷在源码里真实存在）。
 
 ## 决策层（为什么要自己封装队列）
 
@@ -56,7 +56,7 @@ queue.add([{ name: '报告.pdf', size: 1024 ** 2, priority: 5 }])
 
 ## 坑
 
-- ① **axios 不设 timeout = 永久挂起**（默认 0）：弱网下请求无限等——原业务项目 `request.ts` 真实缺陷
+- ① **axios 不设 timeout = 永久挂起**（默认 0）：弱网下请求无限等——实习项目（quotation-agent）`request.ts` 真实缺陷
 - ② **错误拦截器"吞错"**：无响应分支（断网/超时）只弹 toast 不 `Promise.reject`，调用方 await 拿到 undefined，**失败被上层当成功**——弱网没测过的典型产物（同文件真实 bug）
 - ③ 重试不看错误类型：4xx 重试无意义还放大流量
 - ④ 退避不加抖动：服务恢复瞬间所有任务齐发，二次打挂
