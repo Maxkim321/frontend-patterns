@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+@import '@xyflow/react/dist/style.css';
+
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #18181b;
+  --color-card: #ffffff;
+  --color-card-foreground: #18181b;
+  --color-border: #e4e4e7;
+  --color-muted: #f4f4f5;
+  --color-muted-foreground: #71717a;
+  --color-primary: #18181b;
+  --color-primary-foreground: #fafafa;
+  --color-accent: #f4f4f5;
+  --color-destructive: #dc2626;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* Code 预览的 hljs token 颜色（固定亮色主题） */
+.hljs-string { color: #50a14f; }
+.hljs-number { color: #986801; }
+.hljs-literal { color: #0184bc; }
+.hljs-attr { color: #4078f2; }
+.hljs-punctuation { color: #6b7280; }

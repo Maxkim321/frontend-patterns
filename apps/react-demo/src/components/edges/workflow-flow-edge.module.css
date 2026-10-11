@@ -1,0 +1,84 @@
+.track {
+  fill: none;
+  pointer-events: none;
+  transition:
+    stroke 160ms ease,
+    stroke-width 160ms ease;
+}
+
+.flow {
+  fill: none;
+  stroke-dasharray: 6 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition:
+    filter 160ms ease,
+    stroke 160ms ease,
+    stroke-width 160ms ease;
+}
+
+:global(.react-flow__edge.animated) .track {
+  animation: none;
+  stroke-dasharray: none;
+}
+
+:global(.react-flow__edge.animated) .flow {
+  animation: workflow-edge-flow 1050ms linear infinite;
+  stroke-dasharray: 6 6;
+}
+
+:global(.react-flow__edge.selectable:hover) .flow,
+.selected {
+  filter: drop-shadow(0 0 3px color-mix(in oklab, var(--color-primary) 32%, transparent));
+}
+
+.label {
+  position: absolute;
+  max-width: 180px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-border) 66%, transparent);
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--color-card) 88%, transparent);
+  box-shadow: 0 3px 10px color-mix(in oklab, var(--color-foreground) 8%, transparent);
+  color: var(--color-muted-foreground);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.72;
+  padding: 3px 6px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.selectedLabel {
+  border-color: color-mix(in oklab, var(--color-primary) 42%, var(--color-border));
+  color: var(--color-foreground);
+  opacity: 1;
+}
+
+:global(.react-flow__edge.selectable:hover) .label {
+  opacity: 1;
+}
+
+@keyframes workflow-edge-flow {
+  from {
+    stroke-dashoffset: 12;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.react-flow__edge.animated) .flow {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

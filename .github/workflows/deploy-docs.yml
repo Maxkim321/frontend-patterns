@@ -35,6 +35,12 @@ jobs:
       - name: Build docs site
         run: pnpm --filter docs build
 
+      - name: Build React demo
+        run: pnpm --filter @playbook/react-demo build
+
+      - name: Copy React demo into Pages output
+        run: cp -r apps/react-demo/dist apps/docs/.vitepress/dist/react-demo
+
       - uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
