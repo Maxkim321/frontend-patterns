@@ -57,14 +57,14 @@ export function fakeSSEChunks(
     let i = 0
     while (i < events.length) {
       if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+      await sleep(delayMs) // 真实节奏：让打字机效果可见
       const batch = events.slice(i, i + chunkSize)
       // 一个 chunk 里塞多个事件，最后一个事件故意不带回车——制造"事件被分片"的真实情况
       yield batch.map((e) => `data: ${JSON.stringify(e)}\n`).join('')
       i += chunkSize
     }
+    await sleep(delayMs)
     yield 'data: [DONE]\n\n'
-    void delayMs
-    await sleep(0)
   }
   return gen()
 }

@@ -34,8 +34,8 @@
 const { tasks, queue, restore } = useTaskQueue({
   transport: fetchUpload,   // (task, { signal, onProgress }) => Promise
   concurrency: 5,           // 并发槽位
-  maxRetries: 3,
-  baseDelay: 1000,          // 指数退避基数：1s → 2s → 4s…
+  maxRetries: 2,
+  baseDelay: 800,           // 指数退避基数（源实现同值）：0.8s → 1.6s → 3.2s…
   taskTimeout: 300000,      // 5 分钟超时
 })
 
@@ -61,7 +61,7 @@ transport 内部 `signal.aborted` 变 true 自行清理定时器/中断 fetch �
 
 ### 指数退避 + 抖动
 
-`baseDelay * 2^retries + random(300ms)`。固定间隔的问题：弱网恢复瞬间所有失败任务
+`baseDelay * 2^retries + random(300ms)`（基数 800ms 与源实现一致）。固定间隔的问题：弱网恢复瞬间所有失败任务
 同时重试，把刚恢复的网络再打挂（惊群）；指数递增天然错开，抖动进一步打散。
 
 ### 超时 = abort + 失败
@@ -89,8 +89,8 @@ done/canceled 保留终态。对用户表现为：刷新页面，任务列表还
 |---|---|---|
 | `transport` | 必传 | 传输函数，尊重 signal、onProgress 汇报 0-100 |
 | `concurrency` | 3 | 并发槽位数 |
-| `maxRetries` | 3 | 最大重试次数，耗尽转 failed |
-| `baseDelay` | 1000 | 退避基数 ms，按 2^n 递增 + 随机抖动 |
+| `maxRetries` | 2 | 最大重试次数（源实现 TRANSIENT_RETRYABLE 同值），耗尽转 failed |
+| `baseDelay` | 800 | 退避基数 ms（源实现同值），按 2^n 递增 + 随机抖动 |
 | `taskTimeout` | 300000 | 单次尝试超时 ms，超时先 abort 再进退避 |
 | `persistence` | IndexedDB / 内存 | 缺省自动探测，可注入自定义实现 |
 | `onChange` | 无 | 任务快照回调（浅拷贝数组，可直接进响应式框架） |

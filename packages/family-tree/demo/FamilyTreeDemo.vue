@@ -1,14 +1,14 @@
 <template>
   <div class="ft-demo">
     <div class="ft-demo__toolbar">
-      <el-tag size="small">滚轮缩放 / 按住拖拽</el-tag>
       <el-button size="small" @click="removeGreatGrandparent">模拟亲本缺失（查看空位对齐）</el-button>
       <el-button size="small" @click="reset">还原数据</el-button>
     </div>
-    <FamilyTree :nodes="nodes" root-id="p-0" :max-depth="4" :row-height="96" :box-height="48" />
+    <FamilyTree :nodes="nodes" root-id="p-0" :max-depth="4" :height="440" />
     <p class="ft-demo__tip">
-      根节点是目标个体，每层向上追溯一代亲本；每代槽位数固定为 2^depth（1/2/4/8），
-      亲本缺失的槽位只占位不渲染——上下代节点严格对齐，连线只画到实际存在的亲本。
+      根节点是目标个体，每列向右追溯一代亲本；每代槽位数固定为 2^depth（1/2/4/8），
+      亲本缺失的槽位只占位不渲染——上下代节点严格对齐，连线由各节点自带的半线拼接
+      （水平线按容器实测宽计算、垂直线按性别向上/向下，公蓝母橙与源项目一致）。
     </p>
   </div>
 </template>

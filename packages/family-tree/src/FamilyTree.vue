@@ -1,180 +1,109 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { PedigreeNode, TreeSlot } from './types.js'
-import { buildLayers, buildSegments, slotWidthPercent } from './layout.js'
+import { buildLayers, sexLineHeight } from './layout.js'
+import FamilyNode from './Node.vue'
 
 /**
- * 家系树渲染（纯 DOM/CSS）
+ * 家系树渲染 —— 按 deepblup3.0 系谱页（Genealogy.vue）的源机制实现：
  *
- * 布局：每代一行绝对定位（top = depth * rowHeight），行内槽位按百分比切分，
- * 节点卡片在槽位内水平居中；空位不渲染只留白。连接线是独立的绝对定位层。
- * 交互：滚轮缩放（transform: scale）+ 按钮拖拽（translate）。
+ * 布局：flex 横排 maxDepth 个"代"列（每列 flex:1），列内节点纵向 space-around
+ * 均布在固定高度的容器上。数学保证上下代严格对齐：第 d 代第 i 槽的节点中线
+ * 在容器高的 (i+0.5)/2^d 处，恰好是其两个亲本槽（下一代 2i、2i+1）中点的位置。
+ *
+ * 连线：节点自带半线拼接（Node.vue）——水平线宽 = (容器实测宽/代数 - 卡片宽)/2
+ * （ResizeObserver 实测，源码同机制）；垂直线高 = 容器高/2^(depth+1)
+ * （源码 2300px 下的 575/288/145/72 魔数即此通式的取整值）。
+ *
+ * 滚动：容器原生 overflow 滚动（源码同款，无 transform 缩放）。
  */
 const props = withDefaults(
   defineProps<{
     nodes: PedigreeNode[]
     rootId: string
     maxDepth?: number
-    rowHeight?: number
+    /** 图形容器总高 px（源码为 2300 的整屏画布，这里默认收缩到文档可读尺寸） */
+    height?: number
+    boxWidth?: number
     boxHeight?: number
   }>(),
-  { maxDepth: 5, rowHeight: 96, boxHeight: 48 }
+  { maxDepth: 5, height: 460, boxWidth: 150, boxHeight: 44 }
 )
+
+const scrollRef = ref<HTMLElement>()
+const containerWidth = ref(0)
+let observer: ResizeObserver | undefined
+
+onMounted(() => {
+  const el = scrollRef.value
+  if (!el) return
+  observer = new ResizeObserver((entries) => {
+    containerWidth.value = entries[0]?.contentRect.width ?? 0
+  })
+  observer.observe(el)
+})
+onBeforeUnmount(() => observer?.disconnect())
 
 const nodeMap = computed(() => new Map(props.nodes.map((n) => [n.id, n])))
 const layers = computed(() => buildLayers(props.rootId, nodeMap.value, props.maxDepth))
-const segments = computed(() =>
-  buildSegments(layers.value, { rowHeight: props.rowHeight, boxHeight: props.boxHeight })
+
+/** 水平半线长：(容器实测宽/代数 - 卡片宽)/2，负值兜底为 12（卡片贴边时） */
+const lineWidth = computed(() =>
+  Math.max(12, (containerWidth.value / props.maxDepth - props.boxWidth) / 2)
 )
-const totalHeight = computed(() => layers.value.length * props.rowHeight + 24)
 
-const scale = ref(1)
-function onWheel(e: WheelEvent) {
-  e.preventDefault()
-  scale.value = Math.min(1.6, Math.max(0.5, scale.value + (e.deltaY < 0 ? 0.08 : -0.08)))
+function nodeOf(slot: TreeSlot) {
+  return slot.node ?? 'hide'
 }
-
-const dragging = ref(false)
-const translate = ref({ x: 0, y: 0 })
-let start = { x: 0, y: 0 }
-function onDown(e: PointerEvent) {
-  dragging.value = true
-  start = { x: e.clientX - translate.value.x, y: e.clientY - translate.value.y }
-}
-function onMove(e: PointerEvent) {
-  if (!dragging.value) return
-  translate.value = { x: e.clientX - start.x, y: e.clientY - start.y }
-}
-function onUp() {
-  dragging.value = false
-}
-
-const isLastGen = (slot: TreeSlot) => slot.depth === layers.value.length - 1
 </script>
 
 <template>
-  <div
-    class="ft-viewport"
-    :class="{ 'ft-viewport--dragging': dragging }"
-    @wheel="onWheel"
-    @pointerdown="onDown"
-    @pointermove="onMove"
-    @pointerup="onUp"
-    @pointerleave="onUp"
-  >
-    <div
-      class="ft-canvas"
-      :style="{
-        height: `${totalHeight}px`,
-        transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
-      }"
-    >
-      <!-- 连接线层 -->
+  <div ref="scrollRef" class="ft-scroll">
+    <div class="ft-graph" :style="{ height: `${height}px` }">
       <div
-        v-for="(seg, i) in segments"
-        :key="`seg-${i}`"
-        class="ft-line"
-        :class="`ft-line--${seg.orientation}`"
-        :style="
-          seg.orientation === 'vertical'
-            ? { left: `${seg.x1}%`, top: `${seg.y1}px`, height: `${seg.y2 - seg.y1}px` }
-            : { left: `${seg.x1}%`, width: `${seg.x2 - seg.x1}%`, top: `${seg.y1}px` }
-        "
-      />
-
-      <!-- 节点层：每代一行 -->
-      <template v-for="layer in layers" :key="`layer-${layer[0].depth}`">
+        v-for="layer in layers"
+        :key="`gen-${layer[0].depth}`"
+        class="ft-generation"
+      >
         <div
           v-for="slot in layer"
           :key="`slot-${slot.depth}-${slot.index}`"
           class="ft-slot"
-          :style="{
-            top: `${slot.depth * rowHeight}px`,
-            left: `${slot.index * slotWidthPercent(slot.depth)}%`,
-            width: `${slotWidthPercent(slot.depth)}%`,
-            height: `${rowHeight}px`,
-          }"
         >
-          <div
-            v-if="slot.node"
-            class="ft-node"
-            :class="[`ft-node--${slot.node.sex}`, { 'ft-node--last': isLastGen(slot) }]"
-            :style="{ height: `${boxHeight}px` }"
-            @pointerdown.stop
-          >
-            {{ slot.node.name }}
-          </div>
+          <FamilyNode
+            :data="nodeOf(slot)"
+            :line-width="lineWidth"
+            :sex-line-height="sexLineHeight(height, slot.depth)"
+            :box-width="boxWidth"
+            :box-height="boxHeight"
+          />
         </div>
-      </template>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.ft-viewport {
-  position: relative;
-  overflow: hidden;
-  height: 340px;
-  background: #fafbfc;
+.ft-scroll {
+  overflow: auto;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  cursor: grab;
-  touch-action: none;
+  background: #fafbfc;
 }
-.ft-viewport--dragging {
-  cursor: grabbing;
+/* flex 横排"代"列：源码 .graph-container 结构 */
+.ft-graph {
+  display: flex;
+  min-width: 640px;
 }
-.ft-canvas {
-  position: absolute;
-  top: 16px;
-  left: 0;
-  width: 100%;
-  transform-origin: top center;
-  transition: transform 0.05s linear;
-}
-.ft-line {
-  position: absolute;
-  background: #b8c6e0;
-}
-.ft-line--vertical {
-  width: 1.5px;
-}
-.ft-line--horizontal {
-  height: 1.5px;
+/* 每代一列：flex:1 等宽，纵向 space-around 均布（源码 .generation 结构） */
+.ft-generation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
 }
 .ft-slot {
-  position: absolute;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  pointer-events: none;
-}
-.ft-node {
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 96px;
-  max-width: 92%;
-  padding: 0 10px;
-  box-sizing: border-box;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  cursor: default;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ft-node--male {
-  background: linear-gradient(135deg, #3d7bff, #165dff);
-}
-.ft-node--female {
-  background: linear-gradient(135deg, #ff7d9c, #f56c8c);
-}
-.ft-node--last {
-  outline: 1.5px dashed rgba(255, 255, 255, 0.55);
-  outline-offset: -4px;
 }
 </style>

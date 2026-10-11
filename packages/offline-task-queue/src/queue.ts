@@ -30,8 +30,9 @@ export function createTaskQueue(options: QueueOptions) {
   const {
     transport,
     concurrency = 3,
-    maxRetries = 3,
-    baseDelay = 1000,
+    // 与源实现（agent-server llm-providers.js 的 TRANSIENT_RETRYABLE）对齐：最多 2 次重试、基数 800ms
+    maxRetries = 2,
+    baseDelay = 800,
     taskTimeout = 300000,
   } = options
 
@@ -104,10 +105,14 @@ export function createTaskQueue(options: QueueOptions) {
       await attempt(task, controller)
       patch(task.id, { status: 'done', progress: 100 })
     } catch (err) {
-      const e = err as Error
+      const e = err as Error & { retryable?: boolean }
       if (controller.signal.aborted && e.name === 'AbortError') {
         // 用户主动取消：终态，不进重试
         patch(task.id, { status: 'canceled', error: '已取消' })
+      } else if (e.retryable === false) {
+        // 错误分级（源实现 isRetryable 同语义）：4xx/鉴权/参数错标记 retryable:false，
+        // 重试多少次都不会好——直接终态，不消耗重试次数
+        patch(task.id, { status: 'failed', error: e.message }, true)
       } else if (task.retries < maxRetries) {
         const delay = backoffDelay(task.retries)
         patch(task.id, { status: 'waiting', retries: task.retries + 1, error: e.message })

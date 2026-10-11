@@ -40,11 +40,13 @@ queue.add([{ name: '报告.pdf', size: 1024 ** 2, priority: 5 }])
 
 ### 指数退避 + 随机抖动
 
-`baseDelay * 2^retries + rand(0~300ms)`：1s → 2s → 4s。指数拉开间隔给服务恢复时间；**抖动避免恢复瞬间的惊群**——所有失败任务同一时刻重发等于二次打挂。
+`baseDelay * 2^retries + rand(0~300ms)`：0.8s → 1.6s → 3.2s（基数 800ms 与源实现一致）。指数拉开间隔给服务恢复时间；**抖动避免恢复瞬间的惊群**——所有失败任务同一时刻重发等于二次打挂。
 
 ### 错误分级：不是所有失败都值得重试
 
 4xx（鉴权/参数错）和用户取消重试多少次都一样失败，直接终态；只有 429 / 5xx / 网络层失败（fetch TypeError）进退避。"重试不会好的错误不要重试"。
+
+落地约定：transport 抛错时给错误对象带 `retryable: false` 标记（HTTP 4xx 时自行打上），队列见标记直接 failed、不消耗重试次数——分级判断权在 transport（它知道状态码），队列只认标记（源实现 isRetryable 同语义）。
 
 ### 取消永远优先于重试
 
@@ -69,11 +71,12 @@ queue.add([{ name: '报告.pdf', size: 1024 ** 2, priority: 5 }])
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `concurrency` | 3 | 并发槽位数 |
-| `maxRetries` | 3 | 自动重试上限 |
-| `baseDelay` | 1000 | 退避基数（×2^retries） |
+| `maxRetries` | 2 | 自动重试上限（与源实现 TRANSIENT_RETRYABLE 一致） |
+| `baseDelay` | 800 | 退避基数（×2^retries，源实现同值） |
 | `taskTimeout` | 300000 | 单次尝试超时（超时即 abort，按失败进退避） |
 | `persistence` | 自动 | IndexedDB 可用则用之，否则内存 |
 | 进度节流 | 1% | 跨刻度才写库 |
+| 错误分级 | transport 抛 | 错误对象带 `retryable: false`（4xx/鉴权/参数错）直接终态，不消耗重试次数 |
 
 ## 给 AI 的提示词
 
@@ -83,9 +86,10 @@ queue.add([{ name: '报告.pdf', size: 1024 ** 2, priority: 5 }])
 > 1. 职责分离：队列核心只做编排（并发槽位、优先级调度、指数退避+随机抖动、单任务超时、取消），
 >    怎么传输由注入的 transport(task, {signal, onProgress}) 决定，存哪由注入的
 >    persistence（save/load 接口，IndexedDB 或内存实现）决定。
-> 2. 重试策略：baseDelay × 2^retries + 随机抖动（防恢复瞬间惊群）；错误分级——
->    只有 429/5xx/网络层 TypeError 进退避，4xx 和用户取消直接终态；
->    每次重试前检查 signal.aborted，取消要穿透退避等待期。
+> 2. 重试策略：baseDelay × 2^retries + 随机抖动（防恢复瞬间惊群，源实现基数 800ms、
+>    最多重试 2 次）；错误分级——transport 抛错时对 4xx/鉴权/参数错给错误对象带
+>    retryable: false，队列见标记直接终态不消耗重试次数，只有 429/5xx/网络层
+>    TypeError 进退避；每次重试前检查 signal.aborted，取消要穿透退避等待期。
 > 3. 断点续传：任务状态与进度持久化到 IndexedDB，进度按 1% 刻度节流写库；
 >    启动 restore() 把 running/waiting 重置为 pending 并保留 progress，
 >    transport 从 task.progress 断点续传（如跳过已成功分片）。

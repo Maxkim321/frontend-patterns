@@ -21,6 +21,8 @@ UI 骨架与交互设计来自本人实习期间公司项目的 AI 助手组件�
 
 ## 结论
 
+demo 的 UI 按 ui-ai-assistant 源项目骨架实现（折叠侧边栏 256/72px + 新建会话 + 分组历史会话树 + composer；历史重命名/删除补了真实交互——源项目是 console.log 空壳）。核心两层：
+
 - `src/stream.ts` —— SSE 解析器（框架无关）：`consumeSSEStream(chunks, handlers, signal)`，输入任意 `AsyncIterable<string>`（真实项目 = fetch body reader 的文本增量），事件协议 `data: {JSON}` / `data: [DONE]`；`fakeSSEChunks` 供 demo/测试构造分片流
 - `src/useChat.ts` —— Vue 组合式：消息列表、流式增量落到消息的**两轨字段**（thinking/answer 分开）、取消、错误终态、历史裁剪
 - `src/types.ts` —— `ChatMessage`（status 状态机）/ `StreamEvent` / `StreamFactory`
