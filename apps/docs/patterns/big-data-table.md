@@ -120,4 +120,4 @@ Ctrl+F 只能搜到真实存在的 DOM → 不能虚拟裁剪 → 只能把"一�
 >    isAllSelected 布尔 + excludedIds Set 推导，不遍历全量数据。
 > 4. 高频搜索输入先做 300ms 防抖，再触发检索。
 > （可选）我的沉淀库已公开：`https://github.com/Maxkim321/frontend-patterns`（联网 AI 可直接抓取）；
-> 本机路径（有文件权限时更快）：`C:/Users/Maxkim/Desktop/frontend-patterns/packages/big-data-table/src/`
+> 本机路径（有文件权限时更快）：`C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/big-data-table/src/`

@@ -108,4 +108,4 @@ el-checkbox 自带点击翻转，外层再手动切 = 点一下翻转两次。
 > 7. 分页状态由父组件持有：page/pageSize props + page-change 事件；搜索条件变化必须重置 page=1。
 > （可选）参考实现：GitHub `https://github.com/Maxkim321/frontend-patterns`
 > 下 `packages/query-table/src/`；本机路径
-> `C:/Users/Maxkim/Desktop/frontend-patterns/packages/query-table/src/`
+> `C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/query-table/src/`

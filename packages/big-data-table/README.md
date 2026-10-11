@@ -83,9 +83,9 @@
 > 3. 勾选状态用 Set 存储，绑定稳定的业务 id，绝不绑数组下标；全选用
 >    isAllSelected 布尔 + excludedIds Set 推导，不遍历全量数据。
 > 4. 高频搜索输入先做 300ms 防抖，再触发检索。
-> （可选）本机若有我的沉淀库，优先复用其实现：`C:/Users/Maxkim/Desktop/frontend-patterns/packages/big-data-table/src/`
+> （可选）本机若有我的沉淀库，优先复用其实现：`C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/big-data-table/src/`
 
 > [!TIP]
 > 本仓库已公开：`https://github.com/Maxkim321/frontend-patterns`——
 > 有联网能力的 AI 可直接抓取（源码入口 `packages/big-data-table/src/`）；
-> 本机路径（有文件权限时更快）：`C:/Users/Maxkim/Desktop/frontend-patterns/packages/big-data-table/src/`
+> 本机路径（有文件权限时更快）：`C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/big-data-table/src/`

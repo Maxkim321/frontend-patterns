@@ -88,3 +88,11 @@ push 进 `ref` 数组的对象，必须通过 `messages.value[at]` 取回响应�
 | `createStream` | 必传 | 流源工厂：`(history, { signal }) => AsyncIterable<string>` |
 | `historyLimit` | 10 | 发送时携带的历史消息条数上限 |
 | 协议 | `data: {JSON}` | 事件 `{type:'thinking'\|'answer', delta}`，`data: [DONE]` 结束 |
+
+## 给 AI 的提示词
+
+自包含版：不依赖本仓库也能生效，可直接粘贴到任何项目。完整章节说明见 `packages/ai-chat/README.md`。
+
+> 本机实现路径：`C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/ai-chat/src/`
+> （GitHub：`https://github.com/Maxkim321/frontend-patterns`）——提示词正文以上方 README 同名章节为准，
+> 包含完整的需求规则清单，可直接复制使用。

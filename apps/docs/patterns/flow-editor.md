@@ -122,4 +122,4 @@ demo 里的两套配置：
 > 7. 组件对外：emit change(graph)，expose getGraphJSON()/loadGraph()。
 > （可选）参考我的实现：GitHub `https://github.com/Maxkim321/frontend-patterns`
 > 下 `packages/flow-editor/src/`；本机路径
-> `C:/Users/Maxkim/Desktop/frontend-patterns/packages/flow-editor/src/`
+> `C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/flow-editor/src/`

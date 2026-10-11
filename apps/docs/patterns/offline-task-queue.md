@@ -93,3 +93,11 @@ done/canceled 保留终态。对用户表现为：刷新页面，任务列表还
 | `taskTimeout` | 300000 | 单次尝试超时 ms，超时先 abort 再进退避 |
 | `persistence` | IndexedDB / 内存 | 缺省自动探测，可注入自定义实现 |
 | `onChange` | 无 | 任务快照回调（浅拷贝数组，可直接进响应式框架） |
+
+## 给 AI 的提示词
+
+自包含版：不依赖本仓库也能生效，可直接粘贴到任何项目。完整章节说明见 `packages/offline-task-queue/README.md`。
+
+> 本机实现路径：`C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/offline-task-queue/src/`
+> （GitHub：`https://github.com/Maxkim321/frontend-patterns`）——提示词正文以上方 README 同名章节为准，
+> 包含完整的需求规则清单，可直接复制使用。

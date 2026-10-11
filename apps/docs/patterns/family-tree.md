@@ -85,3 +85,11 @@ x 全部用百分比（槽宽 = `100/2^depth`%，天然响应式），y 用像�
 | `maxDepth` | 5 | 最大代数（防脏数据爆栈） |
 | `rowHeight` | 96 | 每代行高 px |
 | `boxHeight` | 48 | 节点卡片高度 px |
+
+## 给 AI 的提示词
+
+自包含版：不依赖本仓库也能生效，可直接粘贴到任何项目。完整章节说明见 `packages/family-tree/README.md`。
+
+> 本机实现路径：`C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/family-tree/src/`
+> （GitHub：`https://github.com/Maxkim321/frontend-patterns`）——提示词正文以上方 README 同名章节为准，
+> 包含完整的需求规则清单，可直接复制使用。
