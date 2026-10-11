@@ -1,5 +1,7 @@
 import {
+  cloneElement,
   createContext,
+  isValidElement,
   useContext,
   useEffect,
   useRef,
@@ -184,18 +186,13 @@ export function PopoverTrigger({
   children?: ReactNode
 }) {
   const ctx = useContext(PopoverContext)
-  if (!asChild || !ctx) return null
-  const child = children as React.ReactElement<Record<string, unknown>>
-  return {
-    ...child,
-    props: {
-      ...child.props,
-      ref: (el: HTMLButtonElement) => {
-        ctx.triggerRef.current = el
-      },
-      onClick: () => ctx.setOpen(!ctx.open),
+  if (!asChild || !ctx || !isValidElement(children)) return null
+  return cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+    ref: (el: HTMLButtonElement) => {
+      ctx.triggerRef.current = el
     },
-  }
+    onClick: () => ctx.setOpen(!ctx.open),
+  } as Partial<Record<string, unknown>>)
 }
 
 export function PopoverContent({
