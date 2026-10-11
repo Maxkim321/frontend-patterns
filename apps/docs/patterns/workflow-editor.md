@@ -2,6 +2,9 @@
 
 ## 在线 Demo
 
+**🎯 交互 Demo（React 原版，拖拽节点 / 连线 / 配置面板 / MiniMap / Code 模式）→ [点这里打开](./react-demo/index.html)**
+（DocFlow 真实组件逐字移植，仅环境依赖经 shim 替换）
+
 <ClientOnly>
 <WorkflowDemo />
 </ClientOnly>
