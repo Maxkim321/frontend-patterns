@@ -122,10 +122,24 @@ function closePreview() {
 }
 
 function download() {
-  const a = document.createElement('a')
-  a.href = previewSrc.value
-  a.download = 'family-tree.jpg'
-  a.click()
+  // data: URL 的 <a download> 在部分 webview 被静默拦截；转 Blob + object URL 兼容性更好，
+  // 仍不生效时（无下载管理器的内嵌浏览器）用户可右键预览图"另存为"
+  try {
+    const [meta, b64] = previewSrc.value.split(',')
+    const mime = meta.match(/data:(.*?);/)?.[1] ?? 'image/jpeg'
+    const bin = atob(b64)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'family-tree.jpg'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  } catch {
+    const w = window.open()
+    w?.document.write(`<img src="${previewSrc.value}" alt="family-tree" />`)
+  }
 }
 </script>
 
@@ -162,7 +176,7 @@ function download() {
     <!-- 截图预览：滚轮缩放（0.2~3 钳制）+ 拖拽平移 -->
     <div v-if="showPreview" class="ft-preview" @wheel="onPreviewWheel">
       <div class="ft-preview__bar">
-        <span>截图预览（滚轮缩放 · 拖拽平移）</span>
+        <span>截图预览（滚轮缩放 · 拖拽平移 · 下载被拦截时右键图片另存为）</span>
         <div class="ft-preview__ops">
           <button type="button" @click="download">下载 JPEG</button>
           <button type="button" @click="closePreview">关闭</button>
