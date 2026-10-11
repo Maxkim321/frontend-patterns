@@ -7,15 +7,16 @@ import FamilyNode from './Node.vue'
 /**
  * 家系树渲染 —— 按 deepblup3.0 系谱页（Genealogy.vue）的源机制实现：
  *
- * 布局：flex 横排 maxDepth 个"代"列（每列 flex:1），列内节点纵向 space-around
- * 均布在固定高度的容器上。数学保证上下代严格对齐：第 d 代第 i 槽的节点中线
- * 在容器高的 (i+0.5)/2^d 处，恰好是其两个亲本槽（下一代 2i、2i+1）中点的位置。
- *
- * 连线：节点自带半线拼接（Node.vue）——水平线宽 = (容器实测宽/代数 - 卡片宽)/2
+ * 布局：flex 双向布局——外层 flex 横排 maxDepth 个"代"列，列内纵向 space-around
+ * 均布在固定高度的容器上（纯 HTML/CSS，无图库）。连线为绝对定位 div：
+ * 节点自带半线拼接（Node.vue）——水平线宽 = (容器实测宽/代数 - 卡片宽)/2
  * （ResizeObserver 实测，源码同机制）；垂直线高 = 容器高/2^(depth+1)
  * （源码 2300px 下的 575/288/145/72 魔数即此通式的取整值）。
  *
- * 滚动：容器原生 overflow 滚动（源码同款，无 transform 缩放）。
+ * 截图导出：html2canvas 截整棵树 → 预览画布支持滚轮缩放（0.2~3 钳制）与
+ * 拖拽平移（对应源码的预览交互；源码的监听器泄漏与无边界缩放两个坑已修）。
+ *
+ * 滚动：容器原生 overflow 滚动（源码同款）。
  */
 const props = withDefaults(
   defineProps<{
@@ -26,11 +27,14 @@ const props = withDefaults(
     height?: number
     boxWidth?: number
     boxHeight?: number
+    /** 是否显示"截图预览"按钮（html2canvas 导出） */
+    showCapture?: boolean
   }>(),
-  { maxDepth: 5, height: 460, boxWidth: 150, boxHeight: 44 }
+  { maxDepth: 5, height: 460, boxWidth: 150, boxHeight: 44, showCapture: true }
 )
 
 const scrollRef = ref<HTMLElement>()
+const graphRef = ref<HTMLElement>()
 const containerWidth = ref(0)
 let observer: ResizeObserver | undefined
 
@@ -42,7 +46,10 @@ onMounted(() => {
   })
   observer.observe(el)
 })
-onBeforeUnmount(() => observer?.disconnect())
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  removePreviewDragListeners()
+})
 
 const nodeMap = computed(() => new Map(props.nodes.map((n) => [n.id, n])))
 const layers = computed(() => buildLayers(props.rootId, nodeMap.value, props.maxDepth))
@@ -55,42 +62,140 @@ const lineWidth = computed(() =>
 function nodeOf(slot: TreeSlot) {
   return slot.node ?? 'hide'
 }
+
+// ═══ html2canvas 截图导出 + 预览画布（缩放/拖拽）═══
+const showPreview = ref(false)
+const capturing = ref(false)
+const previewSrc = ref('')
+const previewScale = ref(1)
+const previewPos = ref({ x: 0, y: 0 })
+let previewDragging = false
+let previewStart = { x: 0, y: 0 }
+
+async function capture() {
+  const el = graphRef.value
+  if (!el || capturing.value) return
+  capturing.value = true
+  try {
+    // 动态引入：避免 SSR 构建期加载浏览器专用库
+    const { default: html2canvas } = await import('html2canvas')
+    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#fafbfc' })
+    previewSrc.value = canvas.toDataURL('image/jpeg', 0.92)
+    previewScale.value = 1
+    previewPos.value = { x: 0, y: 0 }
+    showPreview.value = true
+  } finally {
+    capturing.value = false
+  }
+}
+
+function onPreviewWheel(e: WheelEvent) {
+  e.preventDefault()
+  previewScale.value = Math.min(3, Math.max(0.2, previewScale.value + (e.deltaY < 0 ? 0.1 : -0.1)))
+}
+
+function onPreviewDown(e: PointerEvent) {
+  previewDragging = true
+  previewStart = { x: e.clientX - previewPos.value.x, y: e.clientY - previewPos.value.y }
+  window.addEventListener('pointermove', onPreviewMove)
+  window.addEventListener('pointerup', onPreviewUp)
+}
+
+function onPreviewMove(e: PointerEvent) {
+  if (!previewDragging) return
+  previewPos.value = { x: e.clientX - previewStart.x, y: e.clientY - previewStart.y }
+}
+
+function onPreviewUp() {
+  previewDragging = false
+  removePreviewDragListeners()
+}
+
+function removePreviewDragListeners() {
+  window.removeEventListener('pointermove', onPreviewMove)
+  window.removeEventListener('pointerup', onPreviewUp)
+}
+
+function closePreview() {
+  showPreview.value = false
+  removePreviewDragListeners()
+}
+
+function download() {
+  const a = document.createElement('a')
+  a.href = previewSrc.value
+  a.download = 'family-tree.jpg'
+  a.click()
+}
 </script>
 
 <template>
-  <div ref="scrollRef" class="ft-scroll">
-    <div class="ft-graph" :style="{ height: `${height}px` }">
-      <div
-        v-for="layer in layers"
-        :key="`gen-${layer[0].depth}`"
-        class="ft-generation"
-      >
+  <div class="ft-wrap">
+    <div ref="scrollRef" class="ft-scroll">
+      <div ref="graphRef" class="ft-graph" :style="{ height: `${height}px` }">
         <div
-          v-for="slot in layer"
-          :key="`slot-${slot.depth}-${slot.index}`"
-          class="ft-slot"
+          v-for="layer in layers"
+          :key="`gen-${layer[0].depth}`"
+          class="ft-generation"
         >
-          <FamilyNode
-            :data="nodeOf(slot)"
-            :line-width="lineWidth"
-            :sex-line-height="sexLineHeight(height, slot.depth)"
-            :box-width="boxWidth"
-            :box-height="boxHeight"
-          />
+          <div
+            v-for="slot in layer"
+            :key="`slot-${slot.depth}-${slot.index}`"
+            class="ft-slot"
+          >
+            <FamilyNode
+              :data="nodeOf(slot)"
+              :line-width="lineWidth"
+              :sex-line-height="sexLineHeight(height, slot.depth)"
+              :box-width="boxWidth"
+              :box-height="boxHeight"
+            />
+          </div>
         </div>
+      </div>
+    </div>
+
+    <button v-if="showCapture" type="button" class="ft-capture" :disabled="capturing" @click="capture">
+      {{ capturing ? '截图中…' : '截图预览' }}
+    </button>
+
+    <!-- 截图预览：滚轮缩放（0.2~3 钳制）+ 拖拽平移 -->
+    <div v-if="showPreview" class="ft-preview" @wheel="onPreviewWheel">
+      <div class="ft-preview__bar">
+        <span>截图预览（滚轮缩放 · 拖拽平移）</span>
+        <div class="ft-preview__ops">
+          <button type="button" @click="download">下载 JPEG</button>
+          <button type="button" @click="closePreview">关闭</button>
+        </div>
+      </div>
+      <div
+        class="ft-preview__stage"
+        @pointerdown="onPreviewDown"
+      >
+        <img
+          :src="previewSrc"
+          :style="{
+            transform: `translate(${previewPos.x}px, ${previewPos.y}px) scale(${previewScale})`,
+          }"
+          alt="家系树截图"
+          draggable="false"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.ft-wrap {
+  position: relative;
+}
 .ft-scroll {
   overflow: auto;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fafbfc;
 }
-/* flex 横排"代"列：源码 .graph-container 结构 */
+/* flex 双向布局：外层行（代列）× 内层列（代内节点）——源码 .graph-container 结构 */
 .ft-graph {
   display: flex;
   min-width: 640px;
@@ -105,5 +210,68 @@ function nodeOf(slot: TreeSlot) {
 .ft-slot {
   display: flex;
   justify-content: center;
+}
+
+.ft-capture {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 4px 12px;
+  font-size: 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.ft-capture:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.ft-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 17, 23, 0.75);
+}
+.ft-preview__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  color: #e6edf3;
+  font-size: 13px;
+}
+.ft-preview__ops button {
+  margin-left: 8px;
+  padding: 4px 12px;
+  border: 1px solid #6e7681;
+  border-radius: 6px;
+  background: #21262d;
+  color: #e6edf3;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ft-preview__stage {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+.ft-preview__stage:active {
+  cursor: grabbing;
+}
+.ft-preview__stage img {
+  max-width: 88%;
+  max-height: 88%;
+  transform-origin: center center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  user-select: none;
 }
 </style>
