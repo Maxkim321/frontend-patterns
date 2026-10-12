@@ -32,6 +32,9 @@ importers:
       '@playbook/flow-editor':
         specifier: workspace:*
         version: link:../../packages/flow-editor
+      '@playbook/form-wizard':
+        specifier: workspace:*
+        version: link:../../packages/form-wizard
       '@playbook/offline-task-queue':
         specifier: workspace:*
         version: link:../../packages/offline-task-queue
@@ -118,6 +121,15 @@ importers:
       '@vue-flow/core':
         specifier: ^1.42.0
         version: 1.48.2(vue@3.5.43(typescript@5.9.3))
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.43(typescript@5.9.3)
+
+  packages/form-wizard:
+    dependencies:
+      element-plus:
+        specifier: ^2.8.0
+        version: 2.14.7(vue@3.5.43(typescript@5.9.3))
       vue:
         specifier: ^3.5.13
         version: 3.5.43(typescript@5.9.3)

@@ -13,6 +13,7 @@
     "@playbook/big-data-table": "workspace:*",
     "@playbook/family-tree": "workspace:*",
     "@playbook/flow-editor": "workspace:*",
+    "@playbook/form-wizard": "workspace:*",
     "@playbook/offline-task-queue": "workspace:*",
     "@playbook/query-table": "workspace:*",
     "@playbook/workflow-editor": "workspace:*"
