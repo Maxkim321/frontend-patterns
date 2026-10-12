@@ -1,11 +1,10 @@
 import type { PedigreeNode, TreeSlot } from './types.js'
 
 /**
- * BFS 层次分层：把"父母指针"的稀疏树转成按代分层的二维数组。
+ * BFS 层次分层（简历同款第一句）：把"父母指针"的稀疏树转成按代分层的二维数组。
  *
- * 与源码（deepblup3.0 Genealogy.vue 的 createTreeLayers + fullTree）同机制：
- * 家系不是满二叉树（有的个体缺父/母记录），但布局要求上下代槽位严格
- * 对齐——父节点在第 d 层的 index 为 i，它的两个亲本槽位永远是第 d+1 层的
+ * 家系不是满二叉树（有的个体缺父/母记录），但布局要求上下代槽位严格对齐——
+ * 父节点在第 d 层的 index 为 i，它的两个亲本槽位永远是第 d+1 层的
  * 2i 与 2i+1。所以每层按 2^depth 补空位（null 占位），UI 层空位只占位不渲染。
  */
 export function buildLayers(
@@ -35,13 +34,64 @@ export function buildLayers(
   return layers
 }
 
+/** 槽位宽度百分比 */
+export const slotWidthPercent = (depth: number) => 100 / 2 ** depth
+
+export interface TreeGeometryOptions {
+  /** 每代行高 px */
+  rowHeight: number
+  /** 节点卡片高度 px */
+  boxHeight: number
+}
+
 /**
- * 垂直连线高度通式：容器高 / 2^(depth+1)。
- *
- * 源码在 2300px 容器下硬编码 {1:575, 2:288, 3:145, 4:72}——即 2300/2^(d+1) 的
- * 取整值。这里把魔数还原成通式：任何容器高度下垂直线都精确落在两代的中线间，
- * 与 space-around 的均布数学一致（子节点中线 = 亲本槽位对的中点）。
+ * 连接线几何（绝对定位连线）：对每个存在亲本的父槽位生成肘形三段线——
+ * ① 父底部 → 汇流线的竖线；② 汇流横线，只覆盖实际存在的子槽位区间；
+ * ③ 汇流线 → 各子顶部的竖线。
+ * x 全用百分比（槽宽 = 100/2^depth%，天然响应式），y 用像素（行高固定）。
  */
-export function sexLineHeight(containerHeight: number, depth: number): number {
-  return containerHeight / 2 ** (depth + 1)
+export function buildSegments(
+  layers: TreeSlot[][],
+  opts: TreeGeometryOptions
+): TreeSegment[] {
+  const { rowHeight, boxHeight } = opts
+  const segments: TreeSegment[] = []
+
+  const centerX = (depth: number, index: number) => {
+    const slotWidth = 100 / 2 ** depth
+    return (index + 0.5) * slotWidth
+  }
+  const parentBottomY = (depth: number) => depth * rowHeight + boxHeight
+  const childTopY = (depth: number) => (depth + 1) * rowHeight
+  const midY = (depth: number) => parentBottomY(depth) + (rowHeight - boxHeight) / 2
+
+  for (let d = 0; d < layers.length - 1; d++) {
+    layers[d].forEach((slot) => {
+      if (!slot.node) return
+      const childSlots = [2 * slot.index, 2 * slot.index + 1]
+        .map((i) => layers[d + 1][i])
+        .filter((s): s is TreeSlot => !!s && !!s.node)
+      if (childSlots.length === 0) return
+
+      const px = centerX(d, slot.index)
+      const py1 = parentBottomY(d)
+      const my = midY(d)
+      // 父 → 汇流线
+      segments.push({ x1: px, x2: px, y1: py1, y2: my, orientation: 'vertical' })
+      // 汇流线：覆盖现存子节点的左右区间
+      const xs = childSlots.map((s) => centerX(d + 1, s.index))
+      segments.push({
+        x1: Math.min(...xs),
+        x2: Math.max(...xs),
+        y1: my,
+        y2: my,
+        orientation: 'horizontal',
+      })
+      // 汇流线 → 各子顶部
+      for (const cx of xs) {
+        segments.push({ x1: cx, x2: cx, y1: my, y2: childTopY(d + 1), orientation: 'vertical' })
+      }
+    })
+  }
+  return segments
 }

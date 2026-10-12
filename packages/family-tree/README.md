@@ -7,7 +7,7 @@
 
 # 家系树可视化
 
-提炼来源：本人实习期间公司项目的畜牧数据后台（deepblup3.0）系谱页（`views/FamilyTree/Genealogy.vue` + `components/Node.vue`）——实习中实际上线运行的纯 HTML/CSS 自绘完全二叉树方案。**本库按源码机制实现**（flex 双向布局 + 节点自带半线拼接 + 'hide' 空槽 + 性别配色 + html2canvas 截图导出/预览画布缩放拖拽），并把源码的连线魔数（575/288/145/72）通式化。
+提炼来源：本人实习期间公司项目的畜牧数据后台（deepblup3.0）系谱页（`views/FamilyTree/Genealogy.vue` + `components/Node.vue`）——实习中实际上线运行的纯 HTML/CSS 自绘完全二叉树方案。**功能与简历一致**：BFS 层次遍历补空位、纯 HTML/CSS 渲染（flex 双向布局 + 绝对定位连线）、html2canvas 截图导出、画布拖拽缩放；渲染方向采用更常见的自上而下树形（源码为横向分列），连线几何由源码的"节点拼线"改为统一计算的肘形三段线（同一数学根基：子节点中线 = 亲本槽位对中点，布局参数变化更稳）。
 
 ## 决策层（为什么不用图库）
 
@@ -15,94 +15,106 @@
 |---|---|---|
 | ECharts tree / relation-graph | 辐射/力学布局，**不保证上下代槽位严格对齐**，卡片样式难贴合业务（源项目 relation-graph 试过放弃、echarts 装了没用） | 通用关系图 |
 | SVG 全自绘 | 灵活但要自写全套交互 | 强交互图谱 |
-| **flex 分列 + 2^i 补位 + 连线几何计算**（本方案） | 槽位天然对齐、DOM 结构简单、样式随便贴 | 血统/族谱类"代际列"图 ✅ |
+| **flex 双向布局 + 绝对定位连线**（本方案） | 槽位天然对齐、DOM 结构简单、样式随便贴；这个规模下 DOM 比 Canvas 划算（hover/点击/截图都是白来的） | 血统/族谱类"代际"图 ✅ |
+| Canvas 全自绘 | 交互全要手写 | 节点上千的巨图 |
 
-核心判断：家系图的特殊约束是**上下代槽位严格对齐**（父在上代第 i 槽，亲本永远在下代 2i/2i+1 槽）——这天然是满二叉树索引，flex 分列 + 补空位比图库的布局算法更直接。
+核心判断：家系图的特殊约束是**上下代槽位严格对齐**（父在第 d 层 index i，亲本永远在下代 2i/2i+1 槽）——这天然是满二叉树索引，按代分行 + 补空位比图库的布局算法更直接。
 
 ## 结论
 
-- `src/Node.vue` —— 节点卡片（源 Node.vue 同机制）：卡片 + 左右水平半线 + 性别竖线（母向上/公向下），公蓝 #0f77cb / 母橙 #d07f34，`'hide'` 空槽只占位
-- `src/FamilyTree.vue` —— 渲染（源 Genealogy.vue 同机制）：flex 双向布局（外层行=代列、内层列=代内节点 space-around 均布）、ResizeObserver 实测容器宽算半线长、原生 overflow 滚动；内置 html2canvas 截图预览（滚轮缩放 0.2~3 钳制 + 拖拽平移 + 下载 JPEG）
-- `src/layout.ts` —— `buildLayers`（BFS 分层 + 2^depth 补空位）+ `sexLineHeight`（垂直线高 = 容器高/2^(depth+1)，源码魔数的通式）
+- `src/layout.ts` —— 纯函数布局：
+  - `buildLayers(rootId, nodeMap, maxDepth)`：BFS 层次遍历，把"父/母指针"的稀疏树转成按代分层的二维数组，**每层按 2^depth 补空位**（null 槽），先父后母入队保证与 2i/2i+1 对齐
+  - `buildSegments(layers, { rowHeight, boxHeight })`：绝对定位连线几何——肘形三段（父底部 → 汇流线 → 各子顶部），只覆盖实际存在的子槽位；x 全用百分比（槽宽 = 100/2^depth%，天然响应式）、y 用像素
+  - `slotWidthPercent(depth)`：槽位宽度
+- `src/FamilyTree.vue` —— 渲染：flex 双向布局（外层代行自上而下、行内槽位 flex 均分）、空槽占位不渲染卡片、画布滚轮缩放（0.5~1.6 钳制）+ 拖拽平移（transform 不触发重排）、内置 html2canvas 截图预览（预览内滚轮缩放 0.2~3 + 拖拽 + 下载 JPEG）
 - `src/types.ts` —— `PedigreeNode`（fatherId/motherId 指针）/ `TreeSlot` / `TreeSegment`
 
 ```ts
-const layers = buildLayers(rootId, nodeMap, 5)   // 每层 1/2/4/8/16 槽
-sexLineHeight(containerHeight, depth)            // 垂直线高：容器高/2^(depth+1)
+const layers = buildLayers(rootId, nodeMap, 5)   // 每行 1/2/4/8/16 槽
+const segments = buildSegments(layers, { rowHeight: 96, boxHeight: 48 })
 ```
 
 ## 原理讲解（关键机制）
 
-### 满二叉树槽位对齐
+### BFS 分层（源码 createTreeLayers + fullTree 同机制）
 
-家系不是满二叉树（有的个体缺父/母记录），但布局要求槽位对齐：父节点在第 d 层 index 为 i，其亲本槽位**永远**是第 d+1 层的 2i 与 2i+1。BFS 时先父后母入队即可保证；稀疏处补 null 槽（UI 只占位不渲染），代价是 5 代固定 1+2+4+8+16=31 个槽位。
+队列 + 本层 size 一次消费一层，天然产出"第几代"；父槽位先父后母入队，
+保证队列顺序与满二叉树的 `2i / 2i+1` 索引严格对应（BFS 序 = 堆序）。
 
-### 连线：节点自带半线拼接（源机制）
+### 补空位
 
-每个节点画自己的左/右水平半线（从卡片边缘向外）+ 一条垂直线（按性别向上/向下），
-相邻半线在列间距中拼成完整父子连线——这是源码的画法。两个尺寸都有通式：
+每行补齐到 `2^depth` 个槽位（1/2/4/8/16…），空槽 `node: null`。
+渲染时空槽不输出卡片、不绑事件；布局层照常占据位置——对齐靠的是
+"位置永远存在"，而不是"内容永远存在"。
 
-- 水平线宽 = `(容器实测宽/代数 - 卡片宽) / 2`，ResizeObserver 实测（源码同机制）
-- 垂直线高 = `容器高 / 2^(depth+1)`——源码在 2300px 容器下硬编码的 575/288/145/72
-  即此通式的取整值，本实现还原成公式
+### 连线几何（肘形三段，绝对定位）
 
-数学根基：第 d 代第 i 槽的节点中线在容器高 `(i+0.5)/2^d` 处，恰好等于其两个亲本
-槽位（下一代 2i、2i+1）中点的位置——space-around 均布天然满足，所以半线拼接能严丝合缝。
-
-### 两套数据字段并存（源项目实测）
-
-祖先方向接口给 `father/mother` 嵌套对象递归；后代方向接口给 `fatherId/motherId` 指针 + `son/daughter` 子代数组。本库统一收敛为**指针 + nodeMap** 形态（`{ id, fatherId, motherId, ... }`），接入时做一次适配即可。
+对每个存在亲本的父槽位：① 父底部 → 汇流线的竖线；② 汇流横线，只覆盖
+**实际存在**的子槽位左右区间；③ 汇流线 → 各子顶部的竖线。
+x 全部用百分比（槽宽 = `100/2^depth`%，天然响应式），y 用像素（行高固定），
+两种单位在绝对定位层混用互不干扰。数学根基：子节点中线恒等于其亲本槽位对的中点，
+space-around/均分布局天然满足，所以肘形线能严丝合缝。
 
 ### 截图导出与预览画布（html2canvas）
 
-简历同款能力，源码同机制：`html2canvas` 截整棵树 → 预览弹窗里滚轮缩放 + 拖拽平移 + 下载 JPEG。
-本实现修掉源码的两个真实坑：① 预览的 mousemove/mouseup 监听器挂 window 不移除（多次开关拖拽
-越来越卡）→ **监听器随拖拽结束/弹窗关闭统一移除**；② 缩放无边界 → **钳制 0.2~3**。
-另注意：html2canvas 要等 DOM 渲染完成（nextTick 后）再截；`scale: 2` 保清晰度；
-跨域图片开 `useCORS`；组件里用**动态 import** 引入，避免 SSR 构建期加载浏览器专用库。
+简历同款能力：`html2canvas` 截整棵树 → 预览弹窗里滚轮缩放 + 拖拽平移 + 下载 JPEG。
+实现要点：截图前**临时复位画布的缩放/平移变换**（导出完整未缩放的树，截完恢复）；
+html2canvas 用 `scale: 2` 保清晰度、跨域图片开 `useCORS`；组件里**动态 import** 引入，
+避免 SSR 构建期加载浏览器专用库。修掉源码的两个真实坑：预览的 mousemove/mouseup
+监听器挂 window 不移除（多次开关拖拽越来越卡）→ **随拖拽结束/弹窗关闭统一移除**；
+缩放无边界 → **钳制 0.2~3**。下载用 Blob URL（data: 链接在无下载管理器的 webview
+里被静默拦截），预览栏提示右键另存兜底。
 
-## 坑（源码审查实锤）
+### 画布缩放/拖拽
 
-- ① `JSON.stringify(node) === '{}'` 判空节点：后端给节点加一个字段，末代裁剪逻辑全体失效
-- ② Node.vue 声明 `boxWidth: required` 但父组件没传——每次渲染都报 prop 警告
-- ③ 容器高 2300px、节点 92px、卡片 208px、垂直线 575/288/145/72 全是硬编码魔数，纵向永不自适应——本实现把垂直线魔数通式化为容器高/2^(depth+1)，其余尺寸参数化
-- ④ **事件监听器泄漏**：html2canvas 预览的 mousemove/mouseup 挂在 container/body 上从不移除，多次开关预览后拖拽越来越卡
-- ⑤ 截图预览缩放无 min/max clamp，能缩到无限小；用废弃的 `wheelDelta/detail` 判断方向
-- ⑥ mask（血亲高亮）后原地 sort + 索引 key：点击后整列节点跳动重排；比较器遇 undefined 得 NaN
-- ⑦ keep-alive 页面里 ResizeObserver 注册后从不 disconnect
-- ⑧ 性别筛选参数映射 `{0:[1],1:[0]}` 是反的——UI 选"公猪"实际传母猪
-- ⑨ 查询成功后 `scrollTo({top: 900})` 写死，不同屏高定位不一致
-- ⑩ `deepData` 只取单支：son 非空才走 daughter，混合性别多支子代展示不全
+缩放 = `transform: scale`（滚轮累加，钳制 0.5~1.6）；拖拽 = pointerdown 记起点、
+pointermove 算偏移写 translate。都走 transform，不触发重排；节点上 `@pointerdown.stop`，
+拖画布与节点点击互不打架。
+
+## 坑
+
+- **不补空位直接 flex** → 缺记录分支整体错位，连线接不上
+- **先母后父入队** → 与 2i/2i+1 索引错位，连线画到错误槽位
+- **连接线按"两个亲本都存在"画** → 缺一个时横线悬空；必须只覆盖现存子槽位区间
+- **`JSON.stringify(node) === '{}'` 判空**（源码真实写法）→ 后端给节点加一个字段，末代裁剪全体失效；用明确的 id 判空
+- **x/y 单位混用不一致** → 全用 px 在窄屏溢出，全用 % 在行高上失效；x 用 % y 用 px 是本方案的平衡点
+- **html2canvas 直接截带 transform 的画布** → 截到的是缩放后的样子；截图前复位变换
+- **html2canvas 预览的 mousemove/mouseup 不移除**（源码真实泄漏）→ 多次开关拖拽越来越卡
+- **缩放无边界**（源码真实写法）→ 能缩到无限小/大，必须 clamp
+- **data: URL 直接 `<a download>`** → 无下载管理器的 webview 里被静默拦截；转 Blob + object URL，右键另存兜底
+- **keep-alive 页 ResizeObserver 不 disconnect** → 常驻泄漏
+- **用 Canvas 重绘一切** → 这个规模 DOM 更划算：hover/点击/截图都是白来的
 
 ## 配置项
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
-| `maxDepth` | 5 | 展示代数（2^depth 个槽/层） |
-| `height` | 460 | 图形容器总高 px |
-| `boxWidth` / `boxHeight` | 150 / 44 | 节点卡片尺寸 |
+| `nodes` | 必传 | 扁平节点表（fatherId / motherId 指向上一代） |
+| `rootId` | 必传 | 目标个体 id，向下追溯亲本 |
+| `maxDepth` | 5 | 最大代数（防脏数据爆栈） |
+| `rowHeight` | 96 | 每代行高 px |
+| `boxHeight` | 48 | 节点卡片高度 px |
+| `viewportHeight` | 380 | 画布视口高度 px |
 | `showCapture` | true | 是否显示截图预览按钮 |
 
 ## 给 AI 的提示词
 
 自包含版：不依赖本仓库也能生效，可直接粘贴到任何项目。
 
-> 我要实现一个家系/系谱树可视化（Vue3），约束是上下代槽位必须严格对齐（父在第 d 层
-> index i，其亲本槽位永远是第 d+1 层的 2i 和 2i+1），要求：
-> 1. 不用图库：flex 按代分列，每层按 2^depth 补空位（稀疏血统用 null 槽占位不渲染卡片）。
->    BFS 分层时先父后母入队，保证与满二叉树索引对齐。
-> 2. 数据形态统一为指针 + nodeMap：{ id, fatherId, motherId, ... }；
->    祖先方向接口（father/mother 嵌套对象）与后代方向接口（fatherId/motherId + son/daughter
->    数组）接入时先适配成这个形态。
-> 3. 连线按源机制"节点自带半线拼接"：水平线宽 = (容器实测宽/代数 - 卡片宽)/2
->    （ResizeObserver 实测）；垂直线高 = 容器高/2^(depth+1)（源码 2300px 容器下
->    575/288/145/72 魔数的通式）；垂直线方向按性别（母向上/公向下，公蓝 #0f77cb、
->    母橙 #d07f34）；空槽传 'hide' 只占位不渲染卡片与连线。
-> 4. 截图导出：html2canvas 截整棵树（scale: 2 保清晰度、useCORS 跨域、nextTick 后再截），
->    预览弹窗支持滚轮缩放（钳制 0.2~3）与拖拽平移，监听器随拖拽结束/关闭移除（防泄漏），
->    组件内动态 import html2canvas 避免 SSR 构建期加载浏览器专用库。
-> 5. 空节点判断不要用 JSON.stringify(node)==='{}'（后端加字段就失效），用明确的 id 判空。
-> 5. 节点卡片内容插槽外放；5 代 31 槽注意空槽不渲染事件与内容。
+> 我要实现一个种猪系谱家系树可视化（Vue3），要求：
+> 1. BFS 层次遍历树形数据转层级结构：扁平节点表 + 父母指针（fatherId/motherId），
+>    每层按 2^depth 补空位（稀疏血统 null 占位，渲染时空槽不输出卡片），
+>    父槽位先父后母入队，保证与满二叉树 2i/2i+1 索引严格对应。
+> 2. 纯 HTML/CSS 渲染，不用图库：flex 双向布局（外层按代分行自上而下、
+>    行内槽位 flex 均分，槽宽 = 100/2^depth%）+ 绝对定位连线层——
+>    肘形三段线（父底部 → 汇流线 → 各子顶部），连线只覆盖实际存在的子槽位区间；
+>    x 全用百分比、y 用像素，混用于绝对定位层。
+> 3. 画布交互：滚轮缩放（transform scale，钳制范围）+ 拖拽平移（pointer 记起点算偏移），
+>    节点上 @pointerdown.stop 避免拖画布误触节点。
+> 4. html2canvas 截图导出：截图前复位画布变换（导出完整未缩放的树）、scale: 2 保清晰度、
+>    useCORS 跨域、组件内动态 import 避免 SSR 问题；预览弹窗支持滚轮缩放（钳制）+
+>    拖拽平移 + 下载 JPEG；预览的鼠标监听器随关闭移除（防泄漏）；下载用 Blob URL
+>    （data: 在 webview 被静默拦截）。
 > （可选）参考实现：GitHub `https://github.com/Maxkim321/frontend-patterns`
 > 下 `packages/family-tree/src/`；本机路径
 > `C:/Users/Maxkim/Desktop/冲刺秋招/项目/frontend-patterns/packages/family-tree/src/`

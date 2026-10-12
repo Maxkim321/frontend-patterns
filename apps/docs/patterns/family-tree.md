@@ -7,9 +7,8 @@
 </ClientOnly>
 
 > 源自本人实习期间公司项目（畜牧数据后台 deepblup3.0）的种猪系谱模块——实际上线运行的
-> 纯 DOM/CSS 自绘方案：输入目标个体，向上追溯多代亲本。
-> 数据是"扁平节点表 + 父母指针"，渲染按代分列——按规模选型
-> （单图最多 5 代 31 个节点，DOM 方案样式可控、交互便宜、html2canvas 可直接截图）。
+> 纯 HTML/CSS 自绘方案：输入目标个体，向上追溯多代亲本。
+> 功能与简历一致：BFS 分层补空位、flex 双向布局 + 绝对定位连线、画布拖拽缩放、html2canvas 截图导出。
 
 ## 决策层（为什么"补空位对齐"）
 
@@ -19,78 +18,84 @@
 
 ## 结论
 
-按源码机制实现的三件套（`packages/family-tree/src/`）：
+三件套（`packages/family-tree/src/`）：
 
 | 模块 | 职责 |
 |---|---|
-| `Node.vue` | 节点卡片（源 Node.vue 同机制）：卡片 + 左右水平半线 + 性别竖线（母向上/公向下），公蓝 #0f77cb / 母橙 #d07f34，'hide' 空槽只占位 |
-| `FamilyTree.vue` | 渲染（源 Genealogy.vue 同机制）：flex 横排"代"列 + 列内 space-around 均布 + ResizeObserver 实测宽度算半线长 |
-| `layout.ts` | `buildLayers`（BFS 分层 + 2^depth 补空位）+ `sexLineHeight`（源码魔数通式化） |
+| `layout.ts` | BFS 分层 + 满二叉树补空位 + 肘形连线几何（纯函数，可单测） |
+| `FamilyTree.vue` | 渲染：flex 双向布局（代行自上而下、行内槽位均分）+ 绝对定位连线层 + 画布缩放拖拽 + html2canvas 截图预览 |
+| `types.ts` | PedigreeNode / TreeSlot / TreeSegment |
 
 业务方用法：
 
 ```vue
-<FamilyTree :nodes="nodes" root-id="p-0" :max-depth="4" :height="440" />
+<FamilyTree :nodes="nodes" root-id="p-0" :max-depth="4" :row-height="96" :box-height="48" />
 ```
 
 ```ts
 // nodes：扁平表，fatherId / motherId 指向上一代（祖先方向）
-const layers = buildLayers(rootId, nodeMap, 5)          // 每层 1/2/4/8/16 槽
-sexLineHeight(containerHeight, depth)                   // 垂直线高：容器高/2^(depth+1)
+const layers = buildLayers(rootId, nodeMap, 5)
+const segments = buildSegments(layers, { rowHeight: 96, boxHeight: 48 })
 ```
 
 ## 原理讲解
 
-### BFS 分层（源码 createTreeLayers + fullTree 同机制）
+### BFS 分层
 
 队列 + 本层 size 一次消费一层，天然产出"第几代"；父槽位先父后母入队，
 保证队列顺序与满二叉树的 `2i / 2i+1` 索引严格对应（BFS 序 = 堆序）。
 
 ### 补空位
 
-每层补齐到 `2^depth` 个槽位（1/2/4/8/16…），空槽传 `'hide'`（源码同款约定）。
-渲染时空槽只输出占位容器、不画卡片不画线；布局层照常占据位置——对齐靠的是
+每行补齐到 `2^depth` 个槽位（1/2/4/8/16…），空槽 `node: null`。
+渲染时空槽不输出卡片、不绑事件；布局层照常占据位置——对齐靠的是
 "位置永远存在"，而不是"内容永远存在"。
 
-### 连线：节点自带半线拼接（源机制）
+### 连线几何（肘形三段，绝对定位）
 
-每个节点画自己的左/右水平半线（从卡片边缘向外延伸）+ 一条垂直线（按性别向上/向下），
-相邻半线在列间距中拼成完整父子连线。两个尺寸都有通式：
+对每个存在亲本的父槽位：① 父底部 → 汇流线的竖线；② 汇流横线，只覆盖
+**实际存在**的子槽位左右区间；③ 汇流线 → 各子顶部的竖线。
+x 全用百分比（槽宽 = `100/2^depth`%，天然响应式），y 用像素（行高固定）。
+数学根基：子节点中线恒等于亲本槽位对的中点，均分布局天然满足。
 
-- 水平线宽 = `(容器实测宽/代数 - 卡片宽) / 2`——ResizeObserver 实测（源码同机制）
-- 垂直线高 = `容器高 / 2^(depth+1)`——源码在 2300px 容器下硬编码的 575/288/145/72
-  就是这个通式的取整值，本实现把它还原成公式，任何容器高度都对得上
+### 画布缩放/拖拽
 
-数学根基：第 d 代第 i 槽的节点中线在容器高 `(i+0.5)/2^d` 处，恰好等于其两个亲本
-槽位（下一代 2i、2i+1）中点的位置——space-around 均布天然满足。
+缩放 = `transform: scale`（滚轮累加，钳制 0.5~1.6）；拖拽 = pointerdown 记起点、
+pointermove 算偏移写 translate。都走 transform 不触发重排；节点上 `@pointerdown.stop`，
+拖画布与节点点击互不打架。
 
 ### 截图导出与预览画布（html2canvas）
 
-简历同款能力：html2canvas 截整棵树 → 预览弹窗滚轮缩放（0.2~3 钳制）+ 拖拽平移 + 下载 JPEG。
-修掉源码两个真实坑：监听器挂 window 不移除（多次开关越来越卡）→ 随关闭统一移除；缩放无边界 → 钳制。
-组件内动态 import 引入 html2canvas，避免 SSR 构建期加载浏览器专用库。
+截图前**临时复位画布变换**（导出完整未缩放的树，截完恢复）；`scale: 2` 保清晰度、
+跨域开 `useCORS`、组件内动态 import 避免 SSR 问题。预览弹窗滚轮缩放（0.2~3 钳制）+
+拖拽平移 + 下载 JPEG；监听器随关闭移除（修掉源码的真实泄漏）；下载用 Blob URL
+（data: 链接在无下载管理器的 webview 被静默拦截）。
 
-## 坑（源自源码审查）
+## 坑
 
 - **不补空位直接 flex** → 缺记录分支整体错位，连线接不上
 - **先母后父入队** → 与 2i/2i+1 索引错位，连线画到错误槽位
-- **`JSON.stringify(node) === '{}'` 判空** → 后端给节点加一个字段，末代裁剪全体失效；用明确的 id 判空
-- **垂直线高硬编码 575/288/145/72** → 只在 2300px 容器成立；通式 = 容器高/2^(depth+1)
-- **水平线宽不定宽** → 列宽变化半线接不上；ResizeObserver 实测（源码同机制）
-- **html2canvas 预览的 mousemove/mouseup 不移除** → 多次开关拖拽越来越卡（源码真实泄漏）
-- **缩放无 min/max clamp** → 能缩到无限小/大
-- **mask 后原地 sort + 索引 key** → 点击后整列节点跳动
+- **连接线按"两个亲本都存在"画** → 缺一个时横线悬空；必须只覆盖现存子槽位区间
+- **`JSON.stringify(node) === '{}'` 判空**（源码真实写法）→ 后端加字段就失效；用明确的 id 判空
+- **x/y 单位混用不一致** → x 用 % y 用 px 是平衡点
+- **html2canvas 直接截带 transform 的画布** → 截到缩放后的样子；截图前复位变换
+- **预览监听器挂 window 不移除**（源码真实泄漏）→ 多次开关拖拽越来越卡
+- **缩放无边界**（源码真实写法）→ 必须 clamp
+- **data: URL 直接 `<a download>`** → webview 里被静默拦截；转 Blob + 右键另存兜底
 - **keep-alive 页 ResizeObserver 不 disconnect** → 常驻泄漏
+- **用 Canvas 重绘一切** → 这个规模 DOM 更划算：hover/点击/截图都是白来的
 
 ## 配置项
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `nodes` | 必传 | 扁平节点表（fatherId / motherId 指向上一代） |
-| `rootId` | 必传 | 目标个体 id，向右追溯亲本 |
+| `rootId` | 必传 | 目标个体 id，向下追溯 |
 | `maxDepth` | 5 | 最大代数（防脏数据爆栈） |
-| `height` | 460 | 图形容器总高 px（源码整屏 2300，文档演示收缩） |
-| `boxWidth` / `boxHeight` | 150 / 44 | 节点卡片尺寸 |
+| `rowHeight` | 96 | 每代行高 px |
+| `boxHeight` | 48 | 节点卡片高度 px |
+| `viewportHeight` | 380 | 画布视口高度 px |
+| `showCapture` | true | 是否显示截图预览按钮 |
 
 ## 给 AI 的提示词
 

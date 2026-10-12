@@ -4,12 +4,13 @@
       <el-button size="small" @click="removeGreatGrandparent">模拟亲本缺失（查看空位对齐）</el-button>
       <el-button size="small" @click="reset">还原数据</el-button>
     </div>
-    <FamilyTree :nodes="nodes" root-id="p-0" :max-depth="4" :height="440" />
+    <FamilyTree :nodes="nodes" root-id="p-0" :max-depth="4" :row-height="96" :box-height="48" :viewport-height="380" />
     <p class="ft-demo__tip">
-      根节点是目标个体，每列向右追溯一代亲本；每代槽位数固定为 2^depth（1/2/4/8），
-      亲本缺失的槽位只占位不渲染——上下代节点严格对齐，连线由各节点自带的半线拼接
-      （水平线按容器实测宽计算、垂直线按性别向上/向下，公蓝母橙与源项目一致）。
-      点右上角「截图预览」：html2canvas 截整棵树，预览画布支持滚轮缩放、拖拽平移、下载 JPEG。
+      根节点在顶部，每行向下追溯一代亲本；每行槽位数固定为 2^depth（1/2/4/8），
+      亲本缺失的槽位只占位不渲染——上下代严格对齐，连线为绝对定位的肘形三段线
+      （父底部 → 汇流线 → 子顶部），只画到实际存在的亲本。
+      画布支持滚轮缩放与拖拽平移；点右上角「截图预览」：html2canvas 截整棵树，
+      预览里可缩放、拖拽、下载 JPEG。
     </p>
   </div>
 </template>

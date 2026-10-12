@@ -1,69 +1,67 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { PedigreeNode, TreeSlot } from './types.js'
-import { buildLayers, sexLineHeight } from './layout.js'
-import FamilyNode from './Node.vue'
+import { buildLayers, buildSegments, slotWidthPercent } from './layout.js'
 
 /**
- * 家系树渲染 —— 按 deepblup3.0 系谱页（Genealogy.vue）的源机制实现：
+ * 家系树渲染：自上而下的树形（根在上，逐代向下）+ html2canvas 截图导出。
  *
- * 布局：flex 双向布局——外层 flex 横排 maxDepth 个"代"列，列内纵向 space-around
- * 均布在固定高度的容器上（纯 HTML/CSS，无图库）。连线为绝对定位 div：
- * 节点自带半线拼接（Node.vue）——水平线宽 = (容器实测宽/代数 - 卡片宽)/2
- * （ResizeObserver 实测，源码同机制）；垂直线高 = 容器高/2^(depth+1)
- * （源码 2300px 下的 575/288/145/72 魔数即此通式的取整值）。
+ * 布局：flex 双向——外层按代分行的槽位行内 flex 均分（每槽 100/2^depth%），
+ * 连线是独立的绝对定位层（肘形三段：父底部 → 汇流线 → 各子顶部，
+ * x 走百分比 y 走像素，见 layout.ts buildSegments）。
+ * 空槽只占位不渲染，连线只画到实际存在的亲本。
  *
- * 截图导出：html2canvas 截整棵树 → 预览画布支持滚轮缩放（0.2~3 钳制）与
- * 拖拽平移（对应源码的预览交互；源码的监听器泄漏与无边界缩放两个坑已修）。
- *
- * 滚动：容器原生 overflow 滚动（源码同款）。
+ * 交互：画布滚轮缩放（0.5~1.6 钳制）+ 按钮拖拽平移（transform，不触发重排）。
+ * 截图：html2canvas 截整棵树 → 预览画布（滚轮缩放/拖拽/下载），截图前临时
+ * 复位画布变换，保证导出的是完整未缩放的树。
  */
 const props = withDefaults(
   defineProps<{
     nodes: PedigreeNode[]
     rootId: string
     maxDepth?: number
-    /** 图形容器总高 px（源码为 2300 的整屏画布，这里默认收缩到文档可读尺寸） */
-    height?: number
-    boxWidth?: number
+    rowHeight?: number
     boxHeight?: number
+    /** 视口高度 px（画布在视口内缩放/平移） */
+    viewportHeight?: number
     /** 是否显示"截图预览"按钮（html2canvas 导出） */
     showCapture?: boolean
   }>(),
-  { maxDepth: 5, height: 460, boxWidth: 150, boxHeight: 44, showCapture: true }
+  { maxDepth: 5, rowHeight: 96, boxHeight: 48, viewportHeight: 380, showCapture: true }
 )
-
-const scrollRef = ref<HTMLElement>()
-const graphRef = ref<HTMLElement>()
-const containerWidth = ref(0)
-let observer: ResizeObserver | undefined
-
-onMounted(() => {
-  const el = scrollRef.value
-  if (!el) return
-  observer = new ResizeObserver((entries) => {
-    containerWidth.value = entries[0]?.contentRect.width ?? 0
-  })
-  observer.observe(el)
-})
-onBeforeUnmount(() => {
-  observer?.disconnect()
-  removePreviewDragListeners()
-})
 
 const nodeMap = computed(() => new Map(props.nodes.map((n) => [n.id, n])))
 const layers = computed(() => buildLayers(props.rootId, nodeMap.value, props.maxDepth))
-
-/** 水平半线长：(容器实测宽/代数 - 卡片宽)/2，负值兜底为 12（卡片贴边时） */
-const lineWidth = computed(() =>
-  Math.max(12, (containerWidth.value / props.maxDepth - props.boxWidth) / 2)
+const segments = computed(() =>
+  buildSegments(layers.value, { rowHeight: props.rowHeight, boxHeight: props.boxHeight })
 )
+const totalHeight = computed(() => layers.value.length * props.rowHeight + 24)
 
-function nodeOf(slot: TreeSlot) {
-  return slot.node ?? 'hide'
+// ── 画布缩放/拖拽（transform，不触发重排） ──
+const scale = ref(1)
+const translate = ref({ x: 0, y: 0 })
+const dragging = ref(false)
+let start = { x: 0, y: 0 }
+
+function onWheel(e: WheelEvent) {
+  e.preventDefault()
+  scale.value = Math.min(1.6, Math.max(0.5, scale.value + (e.deltaY < 0 ? 0.08 : -0.08)))
+}
+function onDown(e: PointerEvent) {
+  dragging.value = true
+  start = { x: e.clientX - translate.value.x, y: e.clientY - translate.value.y }
+}
+function onMove(e: PointerEvent) {
+  if (!dragging.value) return
+  translate.value = { x: e.clientX - start.x, y: e.clientY - start.y }
+}
+function onUp() {
+  dragging.value = false
 }
 
-// ═══ html2canvas 截图导出 + 预览画布（缩放/拖拽）═══
+const isLastGen = (slot: TreeSlot) => slot.depth === layers.value.length - 1
+
+// ── html2canvas 截图导出 + 预览画布 ──
 const showPreview = ref(false)
 const capturing = ref(false)
 const previewSrc = ref('')
@@ -73,13 +71,20 @@ let previewDragging = false
 let previewStart = { x: 0, y: 0 }
 
 async function capture() {
-  const el = graphRef.value
+  const el = canvasRef.value
   if (!el || capturing.value) return
   capturing.value = true
   try {
+    // 截图前复位画布变换，导出完整未缩放的树
+    const { scale: s, translate: t } = { scale: scale.value, translate: translate.value }
+    scale.value = 1
+    translate.value = { x: 0, y: 0 }
+    await new Promise((r) => requestAnimationFrame(r))
     // 动态引入：避免 SSR 构建期加载浏览器专用库
     const { default: html2canvas } = await import('html2canvas')
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#fafbfc' })
+    scale.value = s
+    translate.value = t
     previewSrc.value = canvas.toDataURL('image/jpeg', 0.92)
     previewScale.value = 1
     previewPos.value = { x: 0, y: 0 }
@@ -141,29 +146,67 @@ function download() {
     w?.document.write(`<img src="${previewSrc.value}" alt="family-tree" />`)
   }
 }
+
+const canvasRef = ref<HTMLElement>()
+
+onBeforeUnmount(() => removePreviewDragListeners())
 </script>
 
 <template>
   <div class="ft-wrap">
-    <div ref="scrollRef" class="ft-scroll">
-      <div ref="graphRef" class="ft-graph" :style="{ height: `${height}px` }">
+    <div
+      class="ft-viewport"
+      :class="{ 'ft-viewport--dragging': dragging }"
+      :style="{ height: `${viewportHeight}px` }"
+      @wheel="onWheel"
+      @pointerdown="onDown"
+      @pointermove="onMove"
+      @pointerup="onUp"
+      @pointerleave="onUp"
+    >
+      <div
+        ref="canvasRef"
+        class="ft-canvas"
+        :style="{
+          height: `${totalHeight}px`,
+          transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+        }"
+      >
+        <!-- 绝对定位连线层（肘形三段，x% + ypx） -->
+        <div
+          v-for="(seg, i) in segments"
+          :key="`seg-${i}`"
+          class="ft-line"
+          :class="`ft-line--${seg.orientation}`"
+          :style="
+            seg.orientation === 'vertical'
+              ? { left: `${seg.x1}%`, top: `${seg.y1}px`, height: `${seg.y2 - seg.y1}px` }
+              : { left: `${seg.x1}%`, width: `${seg.x2 - seg.x1}%`, top: `${seg.y1}px` }
+          "
+        />
+
+        <!-- 节点层：自上而下，每代一行，行内槽位 flex 均分 -->
         <div
           v-for="layer in layers"
           :key="`gen-${layer[0].depth}`"
-          class="ft-generation"
+          class="ft-row"
+          :style="{ top: `${layer[0].depth * rowHeight}px`, height: `${rowHeight}px` }"
         >
           <div
             v-for="slot in layer"
             :key="`slot-${slot.depth}-${slot.index}`"
             class="ft-slot"
+            :style="{ width: `${slotWidthPercent(slot.depth)}%` }"
           >
-            <FamilyNode
-              :data="nodeOf(slot)"
-              :line-width="lineWidth"
-              :sex-line-height="sexLineHeight(height, slot.depth)"
-              :box-width="boxWidth"
-              :box-height="boxHeight"
-            />
+            <div
+              v-if="slot.node"
+              class="ft-node"
+              :class="[`ft-node--${slot.node.sex}`, { 'ft-node--last': isLastGen(slot) }]"
+              :style="{ height: `${boxHeight}px` }"
+              @pointerdown.stop
+            >
+              {{ slot.node.name }}
+            </div>
           </div>
         </div>
       </div>
@@ -182,10 +225,7 @@ function download() {
           <button type="button" @click="closePreview">关闭</button>
         </div>
       </div>
-      <div
-        class="ft-preview__stage"
-        @pointerdown="onPreviewDown"
-      >
+      <div class="ft-preview__stage" @pointerdown="onPreviewDown">
         <img
           :src="previewSrc"
           :style="{
@@ -203,27 +243,77 @@ function download() {
 .ft-wrap {
   position: relative;
 }
-.ft-scroll {
-  overflow: auto;
+.ft-viewport {
+  position: relative;
+  overflow: hidden;
+  background: #fafbfc;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: #fafbfc;
+  cursor: grab;
+  touch-action: none;
 }
-/* flex 双向布局：外层行（代列）× 内层列（代内节点）——源码 .graph-container 结构 */
-.ft-graph {
-  display: flex;
-  min-width: 640px;
+.ft-viewport--dragging {
+  cursor: grabbing;
 }
-/* 每代一列：flex:1 等宽，纵向 space-around 均布（源码 .generation 结构） */
-.ft-generation {
-  flex: 1;
+.ft-canvas {
+  position: absolute;
+  top: 16px;
+  left: 0;
+  width: 100%;
+  transform-origin: top center;
+  transition: transform 0.05s linear;
+}
+.ft-line {
+  position: absolute;
+  background: #b8c6e0;
+}
+.ft-line--vertical {
+  width: 1.5px;
+}
+.ft-line--horizontal {
+  height: 1.5px;
+}
+/* 每代一行：行内槽位 flex 均分（flex 双向布局的内层行） */
+.ft-row {
+  position: absolute;
+  left: 0;
+  width: 100%;
   display: flex;
-  flex-direction: column;
-  justify-content: space-around;
 }
 .ft-slot {
+  flex: none;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.ft-node {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  max-width: 92%;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ft-node--male {
+  background: linear-gradient(135deg, #3d7bff, #165dff);
+}
+.ft-node--female {
+  background: linear-gradient(135deg, #ff7d9c, #f56c8c);
+}
+.ft-node--last {
+  outline: 1.5px dashed rgba(255, 255, 255, 0.55);
+  outline-offset: -4px;
 }
 
 .ft-capture {
