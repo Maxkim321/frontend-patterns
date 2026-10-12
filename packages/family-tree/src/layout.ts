@@ -62,7 +62,8 @@ export function buildSegments(
     return (index + 0.5) * slotWidth
   }
   const parentBottomY = (depth: number) => depth * rowHeight + boxHeight
-  const childTopY = (depth: number) => (depth + 1) * rowHeight
+  /** 下一行（子代行）的顶部 y */
+  const childRowTopY = (depth: number) => (depth + 1) * rowHeight
   const midY = (depth: number) => parentBottomY(depth) + (rowHeight - boxHeight) / 2
 
   for (let d = 0; d < layers.length - 1; d++) {
@@ -78,18 +79,19 @@ export function buildSegments(
       const my = midY(d)
       // 父 → 汇流线
       segments.push({ x1: px, x2: px, y1: py1, y2: my, orientation: 'vertical' })
-      // 汇流线：覆盖现存子节点的左右区间
+      // 汇流线：覆盖「父中心 + 现存子中心」的区间——单子或子全在一侧时
+      // 父的竖线才能落到汇流线上（否则肘形断成两截）
       const xs = childSlots.map((s) => centerX(d + 1, s.index))
       segments.push({
-        x1: Math.min(...xs),
-        x2: Math.max(...xs),
+        x1: Math.min(px, ...xs),
+        x2: Math.max(px, ...xs),
         y1: my,
         y2: my,
         orientation: 'horizontal',
       })
-      // 汇流线 → 各子顶部
+      // 汇流线 → 各子顶部（y2 = 子代行顶，勿再多加一行）
       for (const cx of xs) {
-        segments.push({ x1: cx, x2: cx, y1: my, y2: childTopY(d + 1), orientation: 'vertical' })
+        segments.push({ x1: cx, x2: cx, y1: my, y2: childRowTopY(d), orientation: 'vertical' })
       }
     })
   }
