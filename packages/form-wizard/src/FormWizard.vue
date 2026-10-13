@@ -151,7 +151,27 @@ function emitSubmit() {
   })
 }
 
-defineExpose({ reset: wizard.reset, editFrom: wizard.editFrom, validateStep: wizard.validateStep })
+defineExpose({
+  reset: wizard.reset,
+  editFrom: wizard.editFrom,
+  validateStep: wizard.validateStep,
+  /** 预填（LLM 抽取结果）并跳到第一个还有必填缺口的步骤，返回该步索引。
+   *  注意用 editFrom（无方向守卫）——goTo 只允许向后回退，向前跳会被它静默忽略 */
+  prefill(values: Record<string, unknown>) {
+    wizard.fill(values)
+    for (let i = 0; i < stepList.value.length; i++) {
+      const missing = wizard
+        .visibleFields(i)
+        .some((f) => f.required && [undefined, null, ''].includes(data[f.name] as never))
+      if (missing) {
+        wizard.editFrom(i)
+        return i
+      }
+    }
+    wizard.editFrom(stepList.value.length - 1)
+    return stepList.value.length - 1
+  },
+})
 </script>
 
 <style scoped>

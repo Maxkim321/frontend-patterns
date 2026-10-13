@@ -1,5 +1,27 @@
 <template>
   <div class="qw-demo">
+    <!-- ═══ 自然语言入口：一句话描述需求 → LLM 抽取结构化要素 → 表单预填、只补缺口 ═══ -->
+    <div class="qw-nl">
+      <div class="qw-nl__head">
+        <span class="qw-ai-badge">对话式收集</span>
+        <span>用一句话描述采购需求，AI 解析后自动预填表单——你只需补齐它没听懂的缺口</span>
+      </div>
+      <div class="qw-nl__row">
+        <textarea
+          v-model="nlText"
+          class="qw-nl__input"
+          rows="2"
+          placeholder="例如：想采购 60 件私有化部署，放在本地 IDC，3 节点集群，含一年维保"
+        />
+        <el-button type="primary" :loading="parsing" @click="onParse">
+          {{ parsing ? '解析中…' : 'AI 解析并预填' }}
+        </el-button>
+      </div>
+      <p v-if="parseStatus" class="qw-nl__status" :class="{ 'qw-nl__status--err': parseError }">
+        {{ parseStatus }}
+      </p>
+    </div>
+
     <FormWizard ref="wizardRef" :steps="steps" :submit="submitQuote" @submit="onSubmitted">
       <!-- ═══ 结果区：报价明细 + 生成式说明（业务渲染，插槽外放） ═══ -->
       <template #result="{ data }">
@@ -27,10 +49,9 @@
       </template>
     </FormWizard>
     <p class="qw-demo-tip">
-      Agent 驱动的动态表单：选「私有化」才出现部署环境、选「旗舰版」才出现并发实例数、
-      数量填到 50 件折扣档位自动变多（阶梯规则）——**字段集合由前面已填的内容决定**，
-      隐藏字段的残留值不会进提交数据。提交后 Agent 检索规则计算（模拟延迟），
-      前端渲染报价明细 + 逐字流式的生成式说明。
+      Agent 驱动的动态表单：一句话描述需求 → AI 抽取要素自动预填（对话式收集）；
+      选「私有化」才出现部署环境、数量填到 50 件折扣档位自动变多（字段集合由已填内容决定）；
+      提交后 Agent 检索规则计算，前端渲染明细 + 逐字流式的生成式说明。
     </p>
   </div>
 </template>
@@ -154,6 +175,77 @@ const steps: WizardStep[] = [
   },
 ]
 
+// ── 自然语言 → 结构化抽取 → 表单预填（对话式收集 + 分步向导的合体） ──
+const wizardRef = ref<InstanceType<typeof FormWizard>>()
+const nlText = ref('')
+const parsing = ref(false)
+const parseStatus = ref('')
+const parseError = ref(false)
+
+const CATEGORY_MAP: Record<string, string> = {
+  '标准版': '标准版', '旗舰版': '旗舰版', '私有化': '私有化', '服务': '服务',
+  '智能体平台-标准版': '标准版', '智能体平台-旗舰版': '旗舰版',
+  '私有化部署': '私有化', '咨询实施服务': '服务',
+}
+const DEPLOY_MAP: Record<string, string> = {
+  '阿里云': '阿里云', '华为云': '华为云', '本地 IDC': '本地 IDC', '本地IDC': '本地 IDC',
+}
+
+async function onParse() {
+  const text = nlText.value.trim()
+  if (!text || parsing.value) return
+  parsing.value = true
+  parseError.value = false
+  parseStatus.value = ''
+  try {
+    const res = await fetch('/api/ark/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'glm-5.3-flash',
+        messages: [
+          {
+            role: 'system',
+            content:
+              '你是报价要素信息抽取器。从用户描述中抽取字段，严格输出一个 JSON 对象（禁止 markdown 代码块），schema：' +
+              '{"category":"标准版|旗舰版|私有化|服务 之一","quantity":正整数或null,"spec":"规格描述字符串或null","deployEnv":"阿里云|华为云|本地 IDC 之一或null"}。' +
+              '无法确定的字段填 null，不要编造。',
+          },
+          { role: 'user', content: text },
+        ],
+        temperature: 0.1,
+      }),
+    })
+    if (!res.ok) throw new Error(`Ark ${res.status}`)
+    const json = await res.json()
+    let raw = json.choices?.[0]?.message?.content ?? ''
+    raw = raw.replace(/```json|```/g, '').trim() // 宽容解析：剥掉可能的代码块围栏
+    const extracted = JSON.parse(raw)
+    // 枚举值归一：抽取结果可能是中文标签，映射回表单 value
+    const mapped: Record<string, unknown> = {}
+    if (extracted.category && CATEGORY_MAP[extracted.category]) mapped.category = CATEGORY_MAP[extracted.category]
+    if (typeof extracted.quantity === 'number' && extracted.quantity > 0) mapped.quantity = extracted.quantity
+    if (extracted.spec) mapped.spec = extracted.spec
+    if (extracted.deployEnv && DEPLOY_MAP[extracted.deployEnv]) mapped.deployEnv = DEPLOY_MAP[extracted.deployEnv]
+    if (Object.keys(mapped).length === 0) {
+      parseStatus.value = '没从这句话里抽到可用的报价要素，换个说法试试（要包含品类/数量）'
+      parseError.value = true
+      return
+    }
+    const stepIndex = wizardRef.value?.prefill(mapped) ?? 0
+    const filled = Object.keys(mapped)
+      .map((k) => `${k}=${mapped[k]}`)
+      .join('，')
+    const stepTitle = steps[stepIndex]?.title ?? ''
+    parseStatus.value = `已抽取并预填：${filled} —— 跳到第 ${stepIndex + 1} 步「${stepTitle}」，补齐剩余项即可提交`
+  } catch (e) {
+    parseStatus.value = `解析失败（${(e as Error).message}），可手动分步填写`
+    parseError.value = true
+  } finally {
+    parsing.value = false
+  }
+}
+
 // ── 模拟 Agent：检索规则计算（延迟 1.2s）──
 const unitPrice = ref(0)
 const submitted = ref<Record<string, unknown>>({})
@@ -264,6 +356,46 @@ onUnmounted(() => clearInterval(timer))
 <style scoped>
 .qw-demo {
   max-width: 720px;
+}
+
+.qw-nl {
+  border: 1px solid #8250df44;
+  background: #fbfaff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qw-nl__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.qw-nl__row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.qw-nl__input {
+  flex: 1;
+  box-sizing: border-box;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+}
+.qw-nl__status {
+  margin: 0;
+  font-size: 12px;
+  color: #1a7f37;
+}
+.qw-nl__status--err {
+  color: #cf222e;
 }
 
 .qw-result {

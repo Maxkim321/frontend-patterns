@@ -134,6 +134,11 @@ export function useWizard(steps: MaybeRefOrGetter<WizardStep[]>) {
     current.value = index
   }
 
+  /** 批量预填（LLM 信息抽取 / 默认值注入）：合并进 data，不清空已有输入 */
+  function fill(values: Record<string, unknown>) {
+    Object.assign(data, values)
+  }
+
   return {
     stepList,
     current,
@@ -153,5 +158,6 @@ export function useWizard(steps: MaybeRefOrGetter<WizardStep[]>) {
     submit,
     reset,
     editFrom,
+    fill,
   }
 }
