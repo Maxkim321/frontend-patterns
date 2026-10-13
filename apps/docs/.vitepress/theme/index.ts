@@ -8,6 +8,7 @@ import FlowEditorDemo from '@playbook/flow-editor/demo/FlowEditorDemo.vue'
 import OfflineQueueDemo from '@playbook/offline-task-queue/demo/OfflineQueueDemo.vue'
 import QueryTableDemo from '@playbook/query-table/demo/QueryTableDemo.vue'
 import QuoteWizardDemo from '@playbook/form-wizard/demo/QuoteWizardDemo.vue'
+import ConversationalQuoteDemo from '@playbook/form-wizard/demo/ConversationalQuoteDemo.vue'
 import WorkflowDemo from '@playbook/workflow-editor/demo/WorkflowDemo.vue'
 import type { Theme } from 'vitepress'
 
@@ -23,6 +24,7 @@ const theme: Theme = {
     app.component('OfflineQueueDemo', OfflineQueueDemo)
     app.component('QueryTableDemo', QueryTableDemo)
     app.component('QuoteWizardDemo', QuoteWizardDemo)
+    app.component('ConversationalQuoteDemo', ConversationalQuoteDemo)
     app.component('WorkflowDemo', WorkflowDemo)
   },
 }
