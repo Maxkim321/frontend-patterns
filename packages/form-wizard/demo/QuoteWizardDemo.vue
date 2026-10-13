@@ -9,9 +9,11 @@
             <table>
               <tbody>
                 <tr><th>品类</th><td>{{ data.category }}</td></tr>
+                <tr v-if="data.deployEnv"><th>部署环境</th><td>{{ data.deployEnv }}</td></tr>
+                <tr v-if="data.instances"><th>并发实例</th><td>{{ data.instances }} 个</td></tr>
+                <tr v-if="data.duration"><th>服务周期</th><td>{{ data.duration }}</td></tr>
                 <tr><th>规格</th><td>{{ data.spec }}</td></tr>
                 <tr><th>数量</th><td>{{ data.quantity }} 件</td></tr>
-                <tr><th>单价</th><td>¥{{ unitPrice }}</td></tr>
                 <tr><th>折扣</th><td>{{ discountText }}</td></tr>
                 <tr class="qw-total"><th>合计</th><td>¥{{ total }}</td></tr>
               </tbody>
@@ -25,9 +27,10 @@
       </template>
     </FormWizard>
     <p class="qw-demo-tip">
-      交互层完整链路：分步填报价要素（每步有引导与校验，不填必填项「下一步」会被拦截）→
-      提交后 Agent 检索规则计算（此处为模拟延迟）→ 前端渲染报价明细 + 逐字流式的生成式说明。
-      「返回编辑」可回到任意已填步骤，数据保留。
+      Agent 驱动的动态表单：选「私有化」才出现部署环境、选「旗舰版」才出现并发实例数、
+      数量填到 50 件折扣档位自动变多（阶梯规则）——**字段集合由前面已填的内容决定**，
+      隐藏字段的残留值不会进提交数据。提交后 Agent 检索规则计算（模拟延迟），
+      前端渲染报价明细 + 逐字流式的生成式说明。
     </p>
   </div>
 </template>
@@ -37,11 +40,11 @@ import { computed, ref } from 'vue'
 import { FormWizard } from '../src/index'
 import type { WizardStep } from '../src/index'
 
-// ── 三步报价要素（品类 → 规格数量 → 折扣条件），schema 配置 ──
+// ── 报价要素：条件字段（deps）+ 动态选项（options 函数）——Agent/规则决定字段集合 ──
 const steps: WizardStep[] = [
   {
     title: '品类',
-    description: '选择要报价的产品品类，Agent 将检索该品类的计价规则。',
+    description: '选择要报价的产品品类——它决定后面要收集哪些参数。',
     fields: [
       {
         name: 'category',
@@ -60,7 +63,7 @@ const steps: WizardStep[] = [
   },
   {
     title: '规格与数量',
-    description: '填写部署规格与采购数量，数量影响阶梯单价。',
+    description: '通用规格之外，不同品类需要的参数不同——由品类动态决定。',
     fields: [
       {
         name: 'spec',
@@ -78,29 +81,78 @@ const steps: WizardStep[] = [
         suffix: '件',
         validate: (v) => (Number(v) > 0 ? true : '数量必须大于 0'),
       },
+      // ── 条件字段：按品类动态出现（Agent 检索该品类的计价要素）──
+      {
+        name: 'deployEnv',
+        label: '部署环境',
+        type: 'select',
+        required: true,
+        placeholder: '请选择部署环境',
+        deps: { field: 'category', includes: ['私有化'] },
+        options: [
+          { label: '阿里云', value: '阿里云' },
+          { label: '华为云', value: '华为云' },
+          { label: '本地 IDC', value: '本地 IDC' },
+        ],
+      },
+      {
+        name: 'instances',
+        label: '并发实例数',
+        type: 'number',
+        required: true,
+        suffix: '个',
+        deps: { field: 'category', includes: ['旗舰版'] },
+      },
+      {
+        name: 'duration',
+        label: '服务周期',
+        type: 'select',
+        required: true,
+        placeholder: '请选择服务周期',
+        deps: { field: 'category', includes: ['服务'] },
+        options: [
+          { label: '1 个月', value: '1 个月' },
+          { label: '3 个月', value: '3 个月' },
+          { label: '6 个月', value: '6 个月' },
+        ],
+      },
     ],
   },
   {
     title: '折扣条件',
-    description: '填写商务折扣条件（可选），Agent 会结合规则库给出折后价与说明。',
+    description: '折扣档位随数量变化（阶梯规则由 Agent 检索）。',
     fields: [
       {
         name: 'discount',
         label: '折扣条件',
         type: 'select',
         placeholder: '请选择折扣档位',
-        options: [
-          { label: '无折扣', value: 'none' },
-          { label: '批量采购 95 折', value: '0.95' },
-          { label: '年度框架 9 折', value: '0.9' },
-          { label: '战略客户 85 折', value: '0.85' },
-        ],
+        // 动态选项：数量达到阶梯阈值（≥50 件）时，Agent 检索出额外档位
+        options: (data) => {
+          const base = [
+            { label: '无折扣', value: 'none' },
+            { label: '批量采购 95 折', value: '0.95' },
+            { label: '年度框架 9 折', value: '0.9' },
+          ]
+          return Number(data.quantity) >= 50
+            ? [...base, { label: '阶梯采购 85 折（≥50 件）', value: '0.85' }]
+            : base
+        },
+      },
+      // 数量达到阶梯才出现的申请项
+      {
+        name: 'tierRequest',
+        label: '阶梯折扣申请说明',
+        type: 'textarea',
+        required: true,
+        placeholder: '简述采购计划，供 Agent 匹配阶梯规则',
+        deps: { when: (data) => Number(data.quantity) >= 50 },
       },
     ],
   },
 ]
 
-// ── 模拟 Agent：检索规则计算（延迟 1.2s），返回明细所需的单价 ──
+// ── 模拟 Agent：检索规则计算（延迟 1.2s）──
 const unitPrice = ref(0)
 const submitted = ref<Record<string, unknown>>({})
 
@@ -121,17 +173,27 @@ const total = computed(() =>
   Math.round(unitPrice.value * Number(submitted.value.quantity ?? 0) * (discount.value || 1)).toLocaleString()
 )
 
-// ── 生成式说明：逐字流式（真实项目接 Agent 的 SSE 接口，解析器与 ai-chat 方案同一条链路） ──
+// ── 生成式说明：按已填要素动态生成，逐字流式（真实项目接 SSE，与 ai-chat 方案同一解析器） ──
 const aiText = ref('')
 const aiStreaming = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
 function onSubmitted(data: Record<string, unknown>) {
+  const cond = data.deployEnv
+    ? `部署于${data.deployEnv}`
+    : data.instances
+      ? `并发 ${data.instances} 实例`
+      : data.duration
+        ? `服务周期 ${data.duration}`
+        : '标准配置'
+  const tier =
+    Number(data.quantity) >= 50
+      ? '已命中阶梯规则 R-2048（≥50 件），在基础折扣上再降一档'
+      : '未达阶梯阈值，按基础档位计价'
   const text =
-    `根据规则库检索，${data.category} 适用于阶梯计价规则 R-1024：采购 ${data.quantity} 件` +
-    `匹配批量档位，${discountText.value !== '无' ? `叠加「${data.discount && discount.value !== 0 ? '商务折扣' : ''}」条件后` : ''}` +
-    `折后合计 ¥${total.value}。该报价有效期 30 天，包含标准维保与两次现场培训；` +
-    `若数量提升至下一阶梯（≥50 件），单价还可下探约 8%，建议评估集中采购。`
+    `根据规则库检索，${data.category} 适用于阶梯计价规则 R-1024（${cond}）：` +
+    `${tier}，${discountText.value !== '无' ? `叠加商务条件后折后合计 ¥${total.value}。` : `合计 ¥${total.value}。`}` +
+    `报价有效期 30 天，含标准维保；若数量提升至下一阶梯（≥50 件），单价还可下探约 8%，建议评估集中采购。`
   aiText.value = ''
   aiStreaming.value = true
   clearInterval(timer)
@@ -144,10 +206,6 @@ function onSubmitted(data: Record<string, unknown>) {
     }
   }, 30)
 }
-
-// 组件卸载时清定时器
-const wizardRef = ref()
-defineExpose({ wizardRef })
 </script>
 
 <style scoped>

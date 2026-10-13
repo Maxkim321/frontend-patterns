@@ -1,6 +1,6 @@
 import { computed, reactive, ref, toValue } from 'vue'
 import type { MaybeRefOrGetter } from 'vue'
-import type { StepValidation, WizardStep } from './types.js'
+import type { FieldDep, StepValidation, WizardStep } from './types.js'
 
 /**
  * 分步向导核心逻辑（框架无关，Vue 组合式）。
@@ -28,10 +28,10 @@ export function useWizard(steps: MaybeRefOrGetter<WizardStep[]>) {
     Math.round(((current.value + 1) / stepList.value.length) * 100)
   )
 
-  /** 校验指定步（默认当前步）：required + 自定义 validate */
+  /** 校验指定步（默认当前步）：required + 自定义 validate，只针对**可见字段** */
   function validateStep(index: number): StepValidation {
     const errs: Record<string, string> = {}
-    for (const field of stepList.value[index]?.fields ?? []) {
+    for (const field of visibleFields(index)) {
       const value = data[field.name]
       const empty =
         value === undefined ||
@@ -48,6 +48,37 @@ export function useWizard(steps: MaybeRefOrGetter<WizardStep[]>) {
       }
     }
     return { ok: Object.keys(errs).length === 0, errors: errs }
+  }
+
+  /** 条件字段可见性：deps（field/includes/when）全部满足才渲染；隐藏字段的残留值在提交前剔除 */
+  function isFieldVisible(field: { deps?: FieldDep }): boolean {
+    const dep = field.deps
+    if (!dep) return true
+    if (dep.when && !dep.when(data)) return false
+    if (dep.field) {
+      const depValue = data[dep.field]
+      const hasValue = depValue !== undefined && depValue !== '' && depValue !== false
+      if (!hasValue) return false
+      if (dep.includes && !dep.includes.includes(depValue as never)) return false
+    }
+    return true
+  }
+
+  /** 当前数据下某一步实际可见的字段（模板与校验共用同一份） */
+  function visibleFields(index: number) {
+    return (stepList.value[index]?.fields ?? []).filter((f) => isFieldVisible(f))
+  }
+
+  /** 提交数据：剔除被条件隐藏的字段残留值（改过品类后旧参数不进后端） */
+  function payload(): Record<string, unknown> {
+    const visibleNames = new Set(
+      stepList.value.flatMap((_, i) => visibleFields(i).map((f) => f.name))
+    )
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(data)) {
+      if (visibleNames.has(k)) out[k] = v
+    }
+    return out
   }
 
   /** 下一步：先清旧错误，校验当前步，通过则前进 */
@@ -114,6 +145,8 @@ export function useWizard(steps: MaybeRefOrGetter<WizardStep[]>) {
     isLast,
     progress,
     validateStep,
+    visibleFields,
+    payload,
     next,
     back,
     goTo,

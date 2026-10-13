@@ -16,9 +16,9 @@
     </div>
     <div class="fw-progress"><div class="fw-progress__bar" :style="{ width: `${progress}%` }" /></div>
 
-    <!-- 结果态：slot 外放（报价明细 + 生成式说明由业务方渲染） -->
+    <!-- 结果态：slot 外放（报价明细 + 生成式说明由业务方渲染），data 为剔除隐藏字段后的提交数据 -->
     <template v-if="status === 'done'">
-      <slot name="result" :data="data" />
+      <slot name="result" :data="payload()" />
       <div class="fw-result-ops">
         <el-button @click="reset()">再填一单</el-button>
       </div>
@@ -35,7 +35,7 @@
           :step="stepList[current]"
         >
           <p v-if="stepList[current]?.description" class="fw-desc">{{ stepList[current].description }}</p>
-          <div v-for="field in stepList[current]?.fields ?? []" :key="field.name" class="fw-field">
+          <div v-for="field in visibleFields(current)" :key="field.name" class="fw-field">
             <label class="fw-label">
               {{ field.label }}
               <span v-if="field.required" class="fw-required">*</span>
@@ -48,7 +48,7 @@
               class="fw-control"
             >
               <el-option
-                v-for="o in field.options"
+                v-for="o in resolveOptions(field)"
                 :key="o.value"
                 :label="o.label"
                 :value="o.value"
@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { toRef } from 'vue'
 import { useWizard } from './useWizard'
-import type { WizardStep } from './types'
+import type { WizardField, WizardStep } from './types'
 
 /**
  * 分步表单向导封装组件（智能报价交互层的通用形态）：
@@ -131,15 +131,23 @@ const {
   isFirst,
   isLast,
   progress,
+  visibleFields,
+  payload,
   next,
   back,
   goTo,
 } = wizard
 
+/** 动态选项：options 可以是函数（按当前已填数据返回选项集合，Agent/规则驱动） */
+function resolveOptions(field: { options?: WizardField['options'] }) {
+  return typeof field.options === 'function' ? field.options(data) : (field.options ?? [])
+}
+
 function emitSubmit() {
-  void wizard.submit(async (payload) => {
-    emit('submit', payload)
-    await props.submit(payload)
+  void wizard.submit(async () => {
+    const finalData = payload() // 剔除被条件隐藏字段的残留值
+    emit('submit', finalData)
+    await props.submit(finalData)
   })
 }
 
