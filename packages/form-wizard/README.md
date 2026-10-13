@@ -73,6 +73,15 @@ const steps: WizardStep[] = [
 
 提交成功后，Agent 返回的生成式说明用**逐字流式**渲染（demo 用打字机模拟；真实项目接 SSE 接口，解析器与「AI 对话组件」方案是同一个 `consumeSSEStream`——对话和报价说明复用同一条流式链路，这是 workspace 包拆分的收益）。
 
+### 真实模型接入（本地开发）
+
+demo 的生成式说明支持真实模型流式（火山引擎 Ark，OpenAI 兼容协议，`glm-5.3-flash`），安全姿势三件套：
+① key 放 `apps/docs/.env.local`（gitignore，永不进仓库）；② Vite 代理 `/api/ark` 转发到
+`ark.cn-beijing.volces.com/api/coding/v3` 并在 `proxyReq` 钩子**服务端注入** Authorization——
+key 不进浏览器 bundle；③ fetch 失败（公网静态站无代理）自动降级为本地打字机模拟，站点永远可演示。
+适配器 `openAICompatToProtocol`（来自 `@playbook/ai-chat`，跨包复用）把 OpenAI 兼容 SSE 转成本仓库的
+thinking/answer 双轨协议——对话与报价说明复用同一条解析链路。
+
 ## 坑
 
 - **条件字段参与校验**：被 deps 隐藏的 required 字段若还校验，用户会被看不见的字段卡死在当前步——校验范围必须是可见字段

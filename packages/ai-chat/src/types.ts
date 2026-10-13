@@ -33,10 +33,10 @@ export interface StreamHandlers {
 
 /**
  * 流源：给定历史与取消信号，产出原始 chunk 文本流。
- * 真实项目里包 fetch + ReadableStream；demo 里用模拟生成器。
- * 抽象成 AsyncIterable<string> 是为了把"SSE 解析"和"怎么连服务器"解耦。
+ * 真实项目里包 fetch + ReadableStream（fetch 本身是异步的，允许返回 Promise）；
+ * demo 里用模拟生成器。抽象成 AsyncIterable<string> 是为了把"SSE 解析"和"怎么连服务器"解耦。
  */
 export type StreamFactory = (
   history: Array<Pick<ChatMessage, 'role' | 'content'>>,
   ctx: { signal: AbortSignal }
-) => AsyncIterable<string>
+) => AsyncIterable<string> | Promise<AsyncIterable<string>>

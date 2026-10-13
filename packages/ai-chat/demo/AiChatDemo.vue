@@ -90,7 +90,7 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { fakeSSEChunks, useChat } from '../src/index.js'
+import { fakeSSEChunks, openAICompatToProtocol, useChat } from '../src/index.js'
 
 // ═══ 侧边栏状态（源项目 Index.vue 的折叠/历史交互） ═══
 const collapsed = ref(false)
@@ -157,23 +157,47 @@ function onHistoryOp(op: string, title: string) {
   }
 }
 
-// ═══ 聊天逻辑（useChat + 假流，与真实 SSE 解析器同一条链路） ═══
+// ═══ 聊天逻辑：本地 dev 走真实模型（经 Vite 代理，key 在服务端注入），失败降级模拟流 ═══
 const draft = ref('')
 const listRef = ref<HTMLElement>()
 
-const THINKING = '用户在问知识库相关的问题，先做同义词扩展，再检索问答对，未命中则退回文档片段比对……'
-const ANSWERS = [
-  '基于知识库检索结果：洛阳经济智能体是搭建在数字孪生底座上的大模型应用，包含智能报价、知识库管理、智能问答三个模块。',
-  '检索命中 2 条问答对与 1 篇文档。要点：知识库管理端负责语料生产（问答对 / 同义词 / 标签），问答端负责检索与生成，答案附引用来源。',
-]
+const MODEL = 'glm-5.3-flash'
+const FALLBACK_THINKING = '（本地未配置模型代理或公网静态站）使用模拟流演示：先做同义词扩展，再检索问答对……'
+const FALLBACK_ANSWER =
+  '这是模拟流的回答。把仓库跑起来并在 apps/docs/.env.local 配置 ARK_API_KEY 后，这里的对话会走真实的 glm-5.3-flash 流式输出（经 Vite 代理注入鉴权，key 不进浏览器）。'
+
+async function realStream(history: { role: string; content: string }[], signal: AbortSignal) {
+  const res = await fetch('/api/ark/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [
+        {
+          role: 'system',
+          content:
+            '你是「洛阳经济智能体」的产品助手（智能报价 / 知识库 / 智能问答）。简洁专业地回答用户问题；涉及报价时说明计价依据与建议。',
+        },
+        ...history,
+      ],
+      stream: true,
+      temperature: 0.7,
+    }),
+  })
+  if (!res.ok) throw new Error(`Ark ${res.status}`)
+  return openAICompatToProtocol(res, signal)
+}
 
 const { messages, streaming, send, stop, clear } = useChat({
-  createStream: (_history, { signal }) =>
-    fakeSSEChunks(
-      THINKING,
-      ANSWERS[Math.floor(Math.random() * ANSWERS.length)],
-      { signal, chunkSize: 5, delayMs: 60 }
-    ),
+  createStream: async (history, { signal }) => {
+    try {
+      return await realStream(history, signal)
+    } catch {
+      // 静态站无代理 / 未配 key → 降级模拟流（同一条 consumeSSEStream 解析链路）
+      return fakeSSEChunks(FALLBACK_THINKING, FALLBACK_ANSWER, { signal, chunkSize: 5, delayMs: 60 })
+    }
+  },
 })
 
 function onSend() {

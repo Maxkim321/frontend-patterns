@@ -53,6 +53,15 @@ TCP 分片**不保证按事件边界到达**——一个事件的 JSON 可能被
 
 一个 `AbortController` 同时喂给 `createStream`（断 fetch）和解析循环（`signal.aborted` 即抛 AbortError），停止按钮一步到位；catch 里区分 AbortError（终态 aborted）和真错误（终态 error）。
 
+### 真实模型接入（本地开发）
+
+demo 支持真实模型流式（火山引擎 Ark，OpenAI 兼容协议，`glm-5.3-flash`），安全姿势三件套：
+① key 放 `apps/docs/.env.local`（gitignore，永不进仓库）；② Vite 代理 `/api/ark` 转发到
+`ark.cn-beijing.volces.com/api/coding/v3` 并在 `proxyReq` 钩子**服务端注入** Authorization——
+key 不进浏览器 bundle；③ fetch 失败（公网静态站无代理）自动降级为模拟流，站点永远可演示。
+适配器 `openAICompatToProtocol` 把 OpenAI 兼容 SSE（`reasoning_content` / `content`）转成本仓库的
+thinking/answer 双轨协议——对话与报价说明复用同一条解析链路。
+
 ## 坑
 
 **来自源项目 ui-ai-assistant 源码审查的实锤：**

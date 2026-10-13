@@ -36,9 +36,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { FormWizard } from '../src/index'
 import type { WizardStep } from '../src/index'
+// 跨包复用（workspace 包直引源码）：OpenAI 兼容适配器与 ai-chat 方案共用同一条解析链路
+import { openAICompatToProtocol } from '@playbook/ai-chat/src/index.js'
 
 // ── 报价要素：条件字段（deps）+ 动态选项（options 函数）——Agent/规则决定字段集合 ──
 const steps: WizardStep[] = [
@@ -173,12 +175,12 @@ const total = computed(() =>
   Math.round(unitPrice.value * Number(submitted.value.quantity ?? 0) * (discount.value || 1)).toLocaleString()
 )
 
-// ── 生成式说明：按已填要素动态生成，逐字流式（真实项目接 SSE，与 ai-chat 方案同一解析器） ──
+// ── 生成式说明：优先走真实模型（Vite 代理注入鉴权），失败降级为打字机模拟 ──
 const aiText = ref('')
 const aiStreaming = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
-function onSubmitted(data: Record<string, unknown>) {
+function fallbackText(data: Record<string, unknown>) {
   const cond = data.deployEnv
     ? `部署于${data.deployEnv}`
     : data.instances
@@ -190,10 +192,14 @@ function onSubmitted(data: Record<string, unknown>) {
     Number(data.quantity) >= 50
       ? '已命中阶梯规则 R-2048（≥50 件），在基础折扣上再降一档'
       : '未达阶梯阈值，按基础档位计价'
-  const text =
+  return (
     `根据规则库检索，${data.category} 适用于阶梯计价规则 R-1024（${cond}）：` +
     `${tier}，${discountText.value !== '无' ? `叠加商务条件后折后合计 ¥${total.value}。` : `合计 ¥${total.value}。`}` +
     `报价有效期 30 天，含标准维保；若数量提升至下一阶梯（≥50 件），单价还可下探约 8%，建议评估集中采购。`
+  )
+}
+
+function typewriter(text: string) {
   aiText.value = ''
   aiStreaming.value = true
   clearInterval(timer)
@@ -206,6 +212,53 @@ function onSubmitted(data: Record<string, unknown>) {
     }
   }, 30)
 }
+
+async function onSubmitted(data: Record<string, unknown>) {
+  aiText.value = ''
+  aiStreaming.value = true
+  clearInterval(timer)
+  const brief =
+    `报价要素：品类=${data.category}；规格=${data.spec}；数量=${data.quantity} 件；` +
+    `单价 ¥${unitPrice.value.toLocaleString()}；折扣=${discountText.value}；合计 ¥${total.value}。` +
+    (data.deployEnv ? `部署环境=${data.deployEnv}。` : '') +
+    (data.instances ? `并发实例=${data.instances}。` : '') +
+    (data.tierRequest ? `阶梯申请=${data.tierRequest}。` : '')
+  try {
+    const res = await fetch('/api/ark/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'glm-5.3-flash',
+        messages: [
+          {
+            role: 'system',
+            content:
+              '你是「洛阳经济智能体」的报价助手。根据用户给出的报价要素与规则检索结果，生成 100 字以内的报价说明：说明计价依据 + 一条业务建议。直接输出说明文字，不要 markdown、不要寒暄。',
+          },
+          { role: 'user', content: brief },
+        ],
+        stream: true,
+        temperature: 0.5,
+      }),
+    })
+    let got = false
+    for await (const chunk of openAICompatToProtocol(res)) {
+      const j = JSON.parse(chunk.slice(5).trim())
+      if (j.type === 'answer') {
+        aiText.value += j.delta
+        got = true
+      }
+    }
+    if (!got) throw new Error('空响应')
+    aiStreaming.value = false
+  } catch {
+    // 静态站无代理 / 未配 key → 降级为本地打字机模拟
+    typewriter(fallbackText(data))
+  }
+}
+
+// 降级打字机的定时器：组件卸载时清理
+onUnmounted(() => clearInterval(timer))
 </script>
 
 <style scoped>

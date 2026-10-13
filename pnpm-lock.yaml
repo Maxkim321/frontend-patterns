@@ -127,6 +127,9 @@ importers:
 
   packages/form-wizard:
     dependencies:
+      '@playbook/ai-chat':
+        specifier: workspace:*
+        version: link:../ai-chat
       element-plus:
         specifier: ^2.8.0
         version: 2.14.7(vue@3.5.43(typescript@5.9.3))

@@ -43,18 +43,16 @@ export function useChat(options: UseChatOptions) {
       .map((m) => ({ role: m.role, content: m.content }))
 
     try {
-      const result = await consumeSSEStream(
-        createStream(history, { signal: controller.signal }),
-        {
-          onThinking: (delta) => {
-            assistant.thinking += delta
-          },
-          onAnswer: (delta) => {
-            assistant.content += delta
-          },
+      // createStream 可能同步给出流，也可能返回 Promise（真实 fetch 场景）——统一 await 解包
+      const chunks = await createStream(history, { signal: controller.signal })
+      const result = await consumeSSEStream(chunks, {
+        onThinking: (delta) => {
+          assistant.thinking += delta
         },
-        controller.signal
-      )
+        onAnswer: (delta) => {
+          assistant.content += delta
+        },
+      }, controller.signal)
       assistant.status = result === 'done' ? 'done' : 'aborted'
     } catch (err) {
       const e = err as Error
