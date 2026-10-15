@@ -13,5 +13,6 @@
 | [Agent 槽位收集提示词](/skills/agent-slot-filling) | 对话式收集 / slot-filling 系统提示词 | 对话式报价实战 |
 | [简历项目拷打预演](/skills/interview-grilling) | 面试前让 AI 当面试官深挖 | 秋招实际工作流 |
 | [报错排查喂料模板](/skills/bug-report-prompt) | 把报错/灵异 bug 喂给 AI 一次喂对 | 库内调试实战复盘 |
+| [UI 还原（Figma MCP）](/skills/ui-restore) | 设计稿 → 代码 + 截图对比验收闭环 | 2026 主流工作流 |
 
 用法：打开对应页面，复制提示词正文，把 `【】` 占位符换成你的上下文即可。每页的"使用要点"是比提示词本身更值钱的部分——那是踩坑换来的。

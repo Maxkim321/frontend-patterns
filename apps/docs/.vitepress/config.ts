@@ -39,6 +39,7 @@ export default defineConfig(({ mode }) => {
           { text: 'Agent 槽位收集', link: '/skills/agent-slot-filling' },
           { text: '简历拷打预演', link: '/skills/interview-grilling' },
           { text: '报错排查喂料', link: '/skills/bug-report-prompt' },
+          { text: 'UI 还原（Figma MCP）', link: '/skills/ui-restore' },
         ],
       },
     ],
