@@ -1,0 +1,14 @@
+{
+  "name": "vue-monorepo-scaffold",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vue3 pnpm monorepo 脚手架：apps/web 应用 + packages（utils/api）工作区包，内置弱网重试的请求层",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

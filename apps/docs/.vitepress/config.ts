@@ -42,6 +42,13 @@ export default defineConfig(({ mode }) => {
           { text: 'UI 还原（Figma MCP）', link: '/skills/ui-restore' },
         ],
       },
+      {
+        text: '脚手架',
+        items: [
+          { text: '总览', link: '/templates/index' },
+          { text: 'vue-monorepo-scaffold', link: '/templates/vue-monorepo-scaffold' },
+        ],
+      },
     ],
       outline: { level: [2, 3] },
     },
