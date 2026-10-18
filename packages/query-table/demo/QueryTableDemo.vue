@@ -29,16 +29,16 @@
 
     <QueryTable
       :key="current"
-      :columns="biz.columns"
-      :rows="rows"
+      :tableHeader="biz.tableHeader"
+      :tableData="rows"
       :total="total"
-      :page="page"
+      :current-page="page"
       :page-size="pageSize"
       :loading="loading"
-      row-key="id"
-      show-index
+      is-sort
       show-tooltip
-      @page-change="onPageChange"
+      @change-page="onPageChange"
+      @change-size="onSizeChange"
     >
       <!-- ═══ 报价单业务的插槽渲染（插槽名 = 列 prop）═══ -->
       <template v-if="current === '报价单管理'" #amount="{ row }">
@@ -88,7 +88,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { SearchForm, QueryTable } from '../src/index'
-import type { QueryColumn, SearchField, SearchParams } from '../src/index'
+import type { Header, SearchField, SearchParams } from '../src/index'
 
 // ══════ 假后端：数据 + 过滤 + 分页 ══════
 interface QuoteRow extends Record<string, unknown> {
@@ -151,14 +151,14 @@ const quoteFields: SearchField[] = [
   { name: 'amount', label: '金额区间', type: 'number-range' },
 ]
 
-const quoteColumns: QueryColumn[] = [
-  { prop: 'quoteNo', label: '报价单号', minWidth: 130 },
-  { prop: 'customer', label: '客户', minWidth: 130 },
-  { prop: 'product', label: '产品', minWidth: 160, showTooltip: true },
-  { prop: 'amount', label: '金额', isSlot: true, minWidth: 120 },
-  { prop: 'status', label: '状态', isSlot: true, minWidth: 90 },
-  { prop: 'date', label: '报价日期', minWidth: 120 },
-  { prop: 'operation', label: '操作', isSlot: true, fixed: 'right', width: 110 },
+const quoteTableHeader: Header[] = [
+  { prop: 'quoteNo', label: '报价单号', minWidth: '130' },
+  { prop: 'customer', label: '客户', minWidth: '130' },
+  { prop: 'product', label: '产品', minWidth: '160', showOverflowTooltip: true },
+  { prop: 'amount', label: '金额', isSlot: true, minWidth: '120' },
+  { prop: 'status', label: '状态', isSlot: true, minWidth: '90' },
+  { prop: 'date', label: '报价日期', minWidth: '120' },
+  { prop: 'operation', label: '操作', isSlot: true, fixed: 'right', width: '110' },
 ]
 
 // ══════ 业务 B：问答管理（system-management / qa-management）══════
@@ -186,19 +186,19 @@ const qaFields: SearchField[] = [
   },
 ]
 
-const qaColumns: QueryColumn[] = [
-  { prop: 'question', label: '问题', isSlot: true, minWidth: 240, showTooltip: true },
-  { prop: 'answerBy', label: '答案来源', minWidth: 110 },
-  { prop: 'asker', label: '提问人', minWidth: 100 },
-  { prop: 'status', label: '状态', isSlot: true, minWidth: 90 },
-  { prop: 'feedback', label: '点赞/点踩', isSlot: true, minWidth: 110 },
-  { prop: 'operation', label: '操作', isSlot: true, fixed: 'right', width: 80 },
+const qaTableHeader: Header[] = [
+  { prop: 'question', label: '问题', isSlot: true, minWidth: '240', showOverflowTooltip: true },
+  { prop: 'answerBy', label: '答案来源', minWidth: '110' },
+  { prop: 'asker', label: '提问人', minWidth: '100' },
+  { prop: 'status', label: '状态', isSlot: true, minWidth: '90' },
+  { prop: 'feedback', label: '点赞/点踩', isSlot: true, minWidth: '110' },
+  { prop: 'operation', label: '操作', isSlot: true, fixed: 'right', width: '80' },
 ]
 
 const businesses = {
   报价单管理: {
     fields: quoteFields,
-    columns: quoteColumns,
+    tableHeader: quoteTableHeader,
     initial: {} as SearchParams,
     pool: quotePool,
     match: (r: QuoteRow, p: SearchParams) => {
@@ -215,7 +215,7 @@ const businesses = {
   },
   问答管理: {
     fields: qaFields,
-    columns: qaColumns,
+    tableHeader: qaTableHeader,
     initial: {} as SearchParams,
     pool: qaPool,
     match: (r: QaRow, p: SearchParams) => {
@@ -226,7 +226,7 @@ const businesses = {
   },
 } satisfies Record<
   string,
-  { fields: SearchField[]; columns: QueryColumn[]; initial: SearchParams; pool: Record<string, unknown>[]; match: (r: Record<string, unknown>, p: SearchParams) => boolean }
+  { fields: SearchField[]; tableHeader: Header[]; initial: SearchParams; pool: Record<string, unknown>[]; match: (r: Record<string, unknown>, p: SearchParams) => boolean }
 >
 
 const current = ref<keyof typeof businesses>('报价单管理')
@@ -256,8 +256,13 @@ function onAction(name: string, params: SearchParams) {
   query(1, pageSize.value) // 查询条件变化必须回到第 1 页
 }
 
-function onPageChange(p: { page: number; pageSize: number }) {
-  query(p.page, p.pageSize)
+function onPageChange(p: number) {
+  query(p, pageSize.value)
+}
+
+// 尺寸变化回到第 1 页（避免落在空页）
+function onSizeChange(s: number) {
+  query(1, s)
 }
 
 function onRowAction(action: string, row: Record<string, unknown>) {
