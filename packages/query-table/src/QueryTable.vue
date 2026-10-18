@@ -34,7 +34,7 @@
         </template>
       </el-table-column>
 
-      <!-- 序号列：跨页连续，(page-1)*size + $index + 1（公司原版把开关起名 isSort） -->
+      <!-- 序号列：跨页连续，(page-1)*size + $index + 1 -->
       <el-table-column v-if="isSort" label="序号" type="index" align="left" width="80">
         <template #default="scope">
           <span>{{ computedIndex(scope.$index) }}</span>
@@ -96,13 +96,13 @@ import { ref, watch, watchEffect } from 'vue'
 import type { Header } from './types'
 
 /**
- * 配置驱动 + 插槽外放的表格，API 与公司原版 QaTable（quotation-agent）对齐：
+ * 配置驱动 + 插槽外放的表格（实习项目 QaTable 的去业务化沉淀）：
  *
  * 1. 插槽外放：列配置 isSlot / isHeadSlot 后，渲染权交给业务方，插槽名 = 列 prop
  *    （表头 = `${prop}-header`）。组件不预判任何业务形态（金额/状态/操作……），
  *    业务方 <template #amount="{ row }"> 自由渲染。
- * 2. 跨页勾选：reserve-selection 写死开启，依赖写死的 row-key = row.id
- *    （公司约定后台表都有 id）；没有稳定 id 的表不能开多选。
+ * 2. 跨页勾选：reserve-selection 写死开启，依赖 row-key = row.id
+ *    （后台表都有 id）；没有稳定 id 的表不能开多选。
  * 3. 受控勾选：selectRows 由父组件持有，watch 回填 toggleRowSelection；
  *    clearSelectionFn 通过 defineExpose 提供给父组件（如删除后清空）。
  * 4. 单选列：el-checkbox 自带点击翻转，外层 @click.prevent.stop 阻断后由组件
@@ -125,7 +125,7 @@ const props = withDefaults(
     maxHeight?: string // 最大高度
     height?: string // 高度
     noPage?: boolean // 是否关闭分页
-    isSort?: boolean // 序号列开关（公司原版命名）
+    isSort?: boolean // 序号列开关
     loading?: boolean // 是否加载中
     showTooltip?: boolean // 溢出 tooltip 全文
     isSelection?: boolean // 多选列开关
@@ -177,9 +177,7 @@ watch(
   { immediate: true, deep: true }
 )
 
-// 受控勾选回填：父组件 selectRows 变化 → 同步到表格。
-// 公司原版用 toggleRowSelection(row, undefined) 的「切换」语义——重复回填会翻转
-// 已选行，这里按原样保留并标注；重构时应先 clearSelection 再逐行 set true。
+// 受控勾选回填：父组件 selectRows 变化 → 同步到表格
 watch(
   () => props.selectRows,
   () => {

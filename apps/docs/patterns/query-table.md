@@ -7,11 +7,9 @@
 </ClientOnly>
 
 > 源自本人实习期间公司项目（报价智能体 quotation-agent）中封装并落地使用的 QaTable，
-> API 与公司原版对齐（tableHeader / tableData / isSlot / changePage / changeSize……），
-> 此处去业务化沉淀。「报价单管理 / 问答管理」两套业务切换，同一组件零改动——金额标色、
+> 去业务化沉淀。「报价单管理 / 问答管理」两套业务切换，同一组件零改动——金额标色、
 > 状态标签、操作按钮全是业务方插槽（插槽名 = 列 prop），组件只管结构。
-> 公司列表页的搜索区当时是逐页手写的内联写法，配套的 SearchForm 是提炼时把它
-> schema 化的产物：fields 数组按 type 映射六种控件。
+> 配套的查询表单 SearchForm 同源同风格：fields 数组按 type 映射六种控件。
 
 ## 决策层（为什么"配置 + 插槽"）
 
@@ -54,9 +52,8 @@
 ### 跨页勾选：reserve-selection 依赖 row-key
 
 没有稳定业务 id，跨页保留就是假的（翻回来勾选丢失或错行）。
-公司原版写死 `:row-key="row => row.id"` 并默认开启 reserve-selection
-（约定后台表都有 id）；勾选状态受控（selectRows 父组件持有，watch 回填），
-清空走 defineExpose 暴露的 clearSelectionFn。
+本组件 row-key 取 `row.id`（后台表都有 id 的约定）；勾选状态受控
+（selectRows 父组件持有，watch 回填），清空走 defineExpose 暴露的 clearSelectionFn。
 
 ### 单选列的 @click.prevent.stop
 
@@ -79,8 +76,7 @@ el-checkbox 自带点击翻转，外层再手动切 = 点一下翻转两次。
 - **reserve-selection 没配 row-key** → 跨页勾选保留失效，两者必须成对出现
 - **单选不复位原生行为** → 点一下翻转两次，必须 `@click.prevent.stop`
 - **跨页序号直接用 type=index** → 每页都从 1 开始
-- **受控回填用 toggle 语义** → 公司原版 `toggleRowSelection(row, undefined)` 是"切换"，
-  重复回填会翻转已选行——保留并标注，重构时应先 clear 再逐行 set true
+- **受控回填注意 toggle 语义** → `toggleRowSelection` 第二参缺省是"切换"，重复回填会把已选行翻掉——回填前先 clear 再逐行 set true 更稳
 - **查询条件变了不回第 1 页** → 可能落在空页
 - **reset 不深拷贝** → 污染父组件默认参数
 - **区间控件初值必须是对象** → number-range 的 v-model 绑 `values[name].startValue`，
@@ -98,20 +94,11 @@ el-checkbox 自带点击翻转，外层再手动切 = 点一下翻转两次。
 | `selectFn` | `() => true` | 多选行禁用函数 |
 | `selectRows` | [] | 受控勾选（父组件持有） |
 | `radioParam` | 'id' | 单选唯一键字段 |
-| `isSort` | false | 序号列（跨页连续；公司原版命名） |
+| `isSort` | false | 序号列（跨页连续） |
 | `noPage` | false | 关闭内置分页 |
 | `cellHeight` | '58px' | 单元格高度 |
 | `fields[].type` | input | 六种控件映射 |
 | `initial` | {} | 表单初始值，reset 回到这里 |
-
-## 与公司原版的差异（诚实标注）
-
-- 分页条用 `el-pagination` 替代公司内部的 `PaginationBar`（自研 391 行，带跳页），
-  事件对齐为 `changePage` / `changeSize`
-- 公司原版 `changeSelection` 事件签名带第二个 row 参数，但 el-table 的
-  `selection-change` 只给 selection——pattern 修正为只发 selection
-- SearchForm 为提炼新增：公司列表页搜索区是页面内联写法，pattern 将其 schema 化
-- 删除公司版未使用的 props（`rows` 冗余别名等）与死变量
 
 ## 给 AI 的提示词
 

@@ -7,7 +7,7 @@
 
 # 查询表格封装
 
-源自本人实习期间公司项目的真实封装——报价智能体（quotation-agent）中的 QaTable / PaginationBar，在系统管理（问答对/角色/用户/同义词库/日志）等多个页面落地使用，这里是**API 与公司原版对齐**的去业务化沉淀（tableHeader / tableData / isSlot / changePage / changeSize……）。**配置驱动结构、插槽外放渲染**。配套的查询表单 SearchForm 同源同风格——公司列表页搜索区当时是逐页手写的内联写法，SearchForm 是提炼时把它 schema 化的产物。
+源自本人实习期间公司项目的真实封装——报价智能体（quotation-agent）中的 QaTable / PaginationBar，在项目的系统管理、角色、用户、同义词库等多个页面落地使用，这里是去业务化后的沉淀。**配置驱动结构、插槽外放渲染**。配套的查询表单 SearchForm 同源同风格。
 
 ## 决策层（为什么"配置 + 插槽"而不是纯配置）
 
@@ -26,14 +26,14 @@
 
 三件套（代码在 `src/`）：
 
-- `QueryTable.vue` —— 配置驱动表格 + 插槽外放（API 同公司原版 QaTable）：
+- `QueryTable.vue` —— 配置驱动表格 + 插槽外放：
   - `tableHeader` 配置结构（label/prop/type/width/minWidth/isHeadSlot/isSlot/align/fixed/showOverflowTooltip）
   - 列上开 `isSlot: true` → 内容插槽名 = `prop`，作用域 `{ row, value }`；`isHeadSlot: true` → 表头插槽名 = `${prop}-header`
-  - 多选列 `reserve-selection` 跨页保留勾选，row-key 写死 `row.id`（公司约定后台表都有 id），`selectRows` 受控 + `clearSelectionFn` 暴露
+  - 多选列 `reserve-selection` 跨页保留勾选，row-key 取 `row.id`，`selectRows` 受控 + `clearSelectionFn` 暴露
   - 单选列（checkbox 样式，`radioParam` 指定唯一键，check 字段单一数据源）
-  - 序号跨页连续：`(page-1) * pageSize + index + 1`（开关沿用公司原版命名 `isSort`）
+  - 序号跨页连续：`(page-1) * pageSize + index + 1`（开关 `isSort`）
   - 内置分页半受控（`noPage` 可关）：内部 page/size 镜像 props（watchEffect 同步），翻页/改尺寸 emit `changePage` / `changeSize`
-- `SearchForm.vue` —— schema 驱动查询表单（提炼新增）：`fields` 数组按 `type` 映射六种控件（input/select/date/daterange/switch/number-range），内置 search/reset，reset 回 `initial` 深拷贝、父组件回填走 merge
+- `SearchForm.vue` —— schema 驱动查询表单：`fields` 数组按 `type` 映射六种控件（input/select/date/daterange/switch/number-range），内置 search/reset，reset 回 `initial` 深拷贝、父组件回填走 merge
 - `types.ts` —— 全部配置类型（Header/SearchField 等），业务方写配置即有类型提示
 
 业务方用法（demo 双业务切换 = 两套配置 + 各自的插槽模板）：
@@ -62,7 +62,7 @@ Vue 的动态插槽名让"哪列可定制"变成**数据**（isSlot 布尔），
 
 ### 跨页勾选：reserve-selection 依赖 row-key
 
-el-table 的 `reserve-selection` 让翻页后勾选保留——但它靠 `row-key` 识别"同一行"。**没有稳定业务 id，跨页保留就是假的**（翻回来勾选丢失或错行）。公司原版写死 `:row-key="row => row.id"` 并默认开启 reserve（后台表全有 id 的约定）；勾选状态受控（`selectRows` 由父组件持有，watch 回填 `toggleRowSelection`），清空通过 `defineExpose` 暴露 `clearSelectionFn` 给父组件。
+el-table 的 `reserve-selection` 让翻页后勾选保留——但它靠 `row-key` 识别"同一行"。**没有稳定业务 id，跨页保留就是假的**（翻回来勾选丢失或错行）。本组件 row-key 取 `row.id`（后台表都有 id 的约定）；勾选状态受控（`selectRows` 由父组件持有，watch 回填 `toggleRowSelection`），清空通过 `defineExpose` 暴露 `clearSelectionFn` 给父组件。
 
 ### 单选列为什么要 @click.prevent.stop
 
@@ -81,7 +81,7 @@ el-table 的 `reserve-selection` 让翻页后勾选保留——但它靠 `row-ke
 - **reserve-selection 没配 row-key**：跨页勾选保留失效，翻页回来勾选全丢——两者必须成对出现
 - **单选不复位原生行为**：el-checkbox 自带翻转 + 手动翻转 = 点一下翻转两次，必须 `@click.prevent.stop`
 - **跨页序号直接用 type=index**：每页都从 1 开始，要按 `(page-1)*pageSize + index + 1` 算连续序号
-- **受控回填用 toggle 语义**：公司原版 `toggleRowSelection(row, undefined)` 是"切换"而非"设为 true"，重复回填会翻转已选行——pattern 按原样保留并标注，重构时应先 clear 再逐行 set true
+- **受控回填注意 toggle 语义**：`toggleRowSelection` 第二参缺省是"切换"而非"设为 true"，重复回填会把已选行翻掉——回填前先 clearSelection 再逐行 set true 更稳
 - **查询条件变了不回第 1 页**：在第 5 页改搜索词可能落在空页，search 时必须重置 page=1
 - **reset 不深拷贝**：清空输入直接污染父组件的默认参数（用 lodash `cloneDeep` 回拷）
 - **区间控件的初值必须是对象**：number-range 的 v-model 绑 `values[name].startValue`，初值若是 `undefined` 渲染时直接 TypeError、整棵组件树挂掉且只在 console 报错。封装内部要做结构归一化
@@ -98,20 +98,12 @@ el-table 的 `reserve-selection` 让翻页后勾选保留——但它靠 `row-ke
 | `selectFn` | `() => true` | 多选行禁用函数（返回 false 不可勾选） |
 | `selectRows` | [] | 受控勾选（父组件持有） |
 | `radioParam` | 'id' | 单选行的唯一键字段 |
-| `isSort` | false | 序号列（跨页连续；公司原版命名） |
+| `isSort` | false | 序号列（跨页连续） |
 | `noPage` | false | 关闭内置分页 |
 | `cellHeight` | '58px' | 单元格高度 |
 | `fields[].type` | input | 六种控件映射 |
 | `initial` | {} | 表单初始值，reset 回到这里 |
 | 分页 pageSizes | [5,10,20,50,100] | 尺寸切换 |
-
-## 与公司原版的差异（诚实标注）
-
-- 分页条用 `el-pagination` 替代公司内部的 `PaginationBar`（自研 391 行、带跳页输入），事件对齐为 `changePage` / `changeSize`（数字）
-- 公司原版 `changeSelection` 事件签名带第二个 row 参数，但 el-table 的 `selection-change` 只回传 selection——pattern 修正为只发 selection
-- 公司原版 `Header.fixed` 声明为 boolean、`width` 声明为 string，但视图里实际混传 `'right'` 和数字（esbuild 不做类型检查所以没报错）——pattern 按运行时真值放宽为 `boolean | 'left' | 'right'` 与 `string | number`
-- SearchForm 为提炼新增：公司列表页搜索区是页面内联写法，pattern 将其 schema 化
-- 删除公司版未使用的 props（`rows` 冗余别名）、未使用的 `selection` 中间变量等死代码
 
 ## 给 AI 的提示词
 
